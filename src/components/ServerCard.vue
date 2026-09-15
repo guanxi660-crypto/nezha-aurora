@@ -2,8 +2,6 @@
 import { computed } from "vue";
 import { useRouter } from "vue-router";
 import type { NezhaServer } from "@/api/types";
-import { netHistory } from "@/store/nezha";
-import NetSparkline from "./NetSparkline.vue";
 import OsIcon from "./OsIcon.vue";
 import UsageBar from "./UsageBar.vue";
 import {
@@ -67,14 +65,6 @@ const cpuInfo = computed(() => {
   const cpuList = props.server.host?.cpu;
   if (!cpuList || !cpuList.length) return "";
   return cpuList[0];
-});
-
-const sparkSeries = computed(() => {
-  const entry = netHistory[props.server.id];
-  return [
-    { points: entry?.down || [], color: "#34d399" },
-    { points: entry?.up || [], color: "#38bdf8" },
-  ];
 });
 
 function open() {
@@ -147,8 +137,6 @@ function open() {
         </div>
       </div>
     </div>
-
-    <NetSparkline v-if="online" :series="sparkSeries" :height="30" />
 
     <footer class="server-card__foot">
       <span>负载 <b class="num">{{ loadText }}</b></span>

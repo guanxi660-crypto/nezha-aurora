@@ -65,11 +65,6 @@ export const state = reactive({
   },
 });
 
-/** 前端侧累积的实时网速趋势（每个节点最近 N 个采样点） */
-export const netHistory = reactive<Record<number, { up: number[]; down: number[] }>>({});
-
-const MAX_HISTORY_POINTS = 48;
-
 let started = false;
 let socket: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -131,26 +126,9 @@ function scheduleReconnect() {
   }, delay);
 }
 
-function pushHistory(servers: NezhaServer[]) {
-  for (const server of servers) {
-    let entry = netHistory[server.id];
-    if (!entry) {
-      entry = { up: [], down: [] };
-      netHistory[server.id] = entry;
-    }
-    entry.up.push(server.state?.net_out_speed || 0);
-    entry.down.push(server.state?.net_in_speed || 0);
-    if (entry.up.length > MAX_HISTORY_POINTS) entry.up.shift();
-    if (entry.down.length > MAX_HISTORY_POINTS) entry.down.shift();
-  }
-}
-
 function applyPayload(payload: { now: number; online?: number; servers?: NezhaServer[] }) {
   if (typeof payload.now === "number") state.now = payload.now;
-  if (Array.isArray(payload.servers)) {
-    state.servers = payload.servers;
-    pushHistory(payload.servers);
-  }
+  if (Array.isArray(payload.servers)) state.servers = payload.servers;
   if (typeof payload.online === "number") state.onlineUsers = payload.online;
   state.receivedOnce = true;
 }

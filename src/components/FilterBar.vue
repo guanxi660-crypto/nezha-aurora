@@ -90,8 +90,6 @@ function setStatus(status: StatusFilter) {
   flex: 1 1 190px;
   width: auto;
   max-width: 340px;
-  /* 节点数标签移除后，让搜索框贴右侧，避免中间留下大片空白 */
-  margin-left: auto;
 }
 
 .sort-group {
