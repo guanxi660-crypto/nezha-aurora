@@ -698,8 +698,11 @@ select {
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 5px;
-  font-size: 10px;
+  /* 撑满整行，避免右侧留下大片空隙 */
+  justify-content: space-between;
+  gap: 4px;
+  /* 字号随卡片宽度自适应：窄卡片略收，360px 以上放大到 11px，避免任何宽度下溢出 */
+  font-size: clamp(9.6px, 3.05cqw, 11px);
   line-height: 1.5;
   color: var(--text-faint);
   padding-top: 3px;
