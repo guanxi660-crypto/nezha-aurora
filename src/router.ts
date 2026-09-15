@@ -33,6 +33,9 @@ if ("scrollRestoration" in window.history) {
  * 这里在若干帧内持续尝试，直到位置到位、页面高度稳定或超时。
  */
 function restoreScroll(position: { left: number; top: number }): Promise<false> {
+  const TIMEOUT_MS = 1500;
+  const STABLE_FRAMES_REQUIRED = 12;
+
   return new Promise((resolve) => {
     const startedAt = performance.now();
     let lastMaxScroll = -1;
@@ -51,8 +54,10 @@ function restoreScroll(position: { left: number; top: number }): Promise<false> 
       window.scrollTo(position.left, Math.min(position.top, maxScroll));
 
       const reached = Math.abs(window.scrollY - position.top) < 2;
-      const settled = stableFrames >= 3;
-      const timedOut = performance.now() - startedAt > 600;
+      const timedOut = performance.now() - startedAt > TIMEOUT_MS;
+      // 只有「页面已经足够高」时，才允许因高度稳定而提前结束；
+      // 高度不足时（列表还在渲染）必须一直重试，否则会被夹在页面底部。
+      const settled = maxScroll >= position.top && stableFrames >= STABLE_FRAMES_REQUIRED;
 
       if (reached || settled || timedOut) {
         resolve(false);
