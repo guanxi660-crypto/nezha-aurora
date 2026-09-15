@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b1120" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- 与官方用户前端一致的图标资源；如需完全离线可自行替换为本地文件 -->
+    <link rel="stylesheet" href="https://fastly.jsdelivr.net/gh/lipis/flag-icons@7.0.0/css/flag-icons.min.css" />
+    <link rel="stylesheet" href="https://fastly.jsdelivr.net/npm/font-logos@1/assets/font-logos.css" />
+    <title>Nezha Aurora</title>
+    <script>
+      // 首屏前置应用主题，避免亮暗切换闪烁
+      ;(() => {
+        try {
+          const stored = localStorage.getItem("aurora-theme")
+          const media = window.matchMedia("(prefers-color-scheme: dark)")
+          const theme =
+            stored === "dark" || stored === "light"
+              ? stored
+              : media.matches
+                ? "dark"
+                : "light"
+          document.documentElement.dataset.theme = theme
+          document.documentElement.style.colorScheme = theme
+        } catch (e) {
+          document.documentElement.dataset.theme = "dark"
+        }
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,38 @@
+# Caddy 示例：一个域名同时承载 Aurora 前端与哪吒面板
+# 假设哪吒面板监听 127.0.0.1:8008，Aurora 容器监听 127.0.0.1:8081
+status.example.com {
+    encode zstd gzip
+
+    # 1) Agent ↔ Dashboard 的 gRPC (h2c)
+    @grpcProto path /proto.NezhaService/*
+    handle @grpcProto {
+        reverse_proxy {
+            header_up Host {host}
+            header_up nz-realip {remote_host}
+            transport http {
+                versions h2c
+                read_buffer 4096
+            }
+            to 127.0.0.1:8008
+        }
+    }
+
+    # 2) 面板后台 + API + WebSocket
+    @nezha path /dashboard /dashboard/* /api/v1 /api/v1/*
+    handle @nezha {
+        reverse_proxy {
+            header_up Host {host}
+            header_up Origin https://{host}
+            header_up nz-realip {remote_host}
+            transport http {
+                read_buffer 16384
+            }
+            to 127.0.0.1:8008
+        }
+    }
+
+    # 3) 其余请求交给 Aurora 前端
+    handle {
+        reverse_proxy 127.0.0.1:8081
+    }
+}
