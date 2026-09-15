@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { state, visibleServers } from "@/store/nezha";
+import { state } from "@/store/nezha";
 import type { SortKey, StatusFilter } from "@/store/nezha";
 
 const statusOptions: { key: StatusFilter; label: string }[] = [
@@ -74,8 +74,6 @@ function setStatus(status: StatusFilter) {
       </svg>
       <input v-model="state.filter.keyword" type="search" placeholder="搜索节点 / 系统" />
     </label>
-
-    <span class="chip num node-count">{{ visibleServers.length }} 个节点</span>
   </section>
 </template>
 
@@ -92,6 +90,8 @@ function setStatus(status: StatusFilter) {
   flex: 1 1 190px;
   width: auto;
   max-width: 340px;
+  /* 节点数标签移除后，让搜索框贴右侧，避免中间留下大片空白 */
+  margin-left: auto;
 }
 
 .sort-group {
@@ -111,9 +111,6 @@ function setStatus(status: StatusFilter) {
     order: 3;
     flex: 1 1 100%;
     max-width: none;
-  }
-  .node-count {
-    display: none;
   }
 }
 </style>
