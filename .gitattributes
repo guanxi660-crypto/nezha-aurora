@@ -1,0 +1,21 @@
+# 统一使用 LF 行尾，避免不同系统克隆后出现整文件 diff
+* text=auto eol=lf
+
+# 二进制资源不做行尾转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.zip binary
+
+# 部署脚本类文件强制 LF
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.conf text eol=lf
+Caddyfile text eol=lf
+Caddyfile.example text eol=lf
