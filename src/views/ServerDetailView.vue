@@ -4,6 +4,7 @@ import { fetchMonitor, fetchServerMetrics } from "@/api/client";
 import type { MetricDataPoint, MetricPeriod, MetricType, NezhaMonitor } from "@/api/types";
 import MetricChart from "@/components/MetricChart.vue";
 import MetricRing from "@/components/MetricRing.vue";
+import { vFillGrid } from "@/directives/fill-grid";
 import {
   countryFlag,
   formatBytes,
@@ -171,49 +172,10 @@ watch(
 
       <section class="panel detail-section">
         <div class="detail-section__head">
-          <h2 class="section-title">历史曲线</h2>
-          <div class="detail-section__tools">
-            <select v-model="metric" class="select" aria-label="指标">
-              <option v-for="item in METRICS" :key="item.key" :value="item.key">
-                {{ item.label }}
-              </option>
-            </select>
-            <div class="seg">
-              <button
-                v-for="item in PERIODS"
-                :key="item.key"
-                type="button"
-                :class="{ 'is-active': period === item.key }"
-                @click="period = item.key"
-              >
-                {{ item.label }}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <p v-if="chartError" class="detail-hint detail-hint--error">
-          曲线读取失败：{{ chartError }}
-        </p>
-        <p v-else-if="!points.length && !chartLoading" class="detail-hint">
-          该时间段暂无历史数据。部分指标需要面板启用 TSDB 后才有记录。
-        </p>
-
-        <MetricChart
-          :points="points"
-          :name="currentMetric.label"
-          :color="currentMetric.color"
-          :formatter="formatter"
-          :loading="chartLoading"
-        />
-      </section>
-
-      <section class="panel detail-section">
-        <div class="detail-section__head">
           <h2 class="section-title">系统信息</h2>
         </div>
 
-        <div class="info-grid">
+        <div v-fill-grid class="info-grid">
           <div class="info-cell">
             <span class="info-cell__label">主机名</span>
             <span class="info-cell__value">{{ server.name }}</span>
@@ -232,9 +194,11 @@ watch(
             <span class="info-cell__label">CPU</span>
             <span class="info-cell__value">{{ server.host?.cpu?.[0] || "-" }}</span>
           </div>
-          <div class="info-cell" v-if="server.host?.gpu?.length">
+          <div class="info-cell">
             <span class="info-cell__label">GPU</span>
-            <span class="info-cell__value">{{ server.host.gpu.join(", ") }}</span>
+            <span class="info-cell__value">
+              {{ server.host?.gpu?.length ? server.host.gpu.join(", ") : "-" }}
+            </span>
           </div>
           <div class="info-cell">
             <span class="info-cell__label">内存</span>
@@ -272,6 +236,14 @@ watch(
             <span class="info-cell__label">进程数</span>
             <span class="info-cell__value num">{{ server.state?.process_count || 0 }}</span>
           </div>
+          <div v-if="!temperatures.length" class="info-cell">
+            <span class="info-cell__label">温度</span>
+            <span class="info-cell__value">-</span>
+          </div>
+          <div class="info-cell" v-for="temp in temperatures" :key="temp.Name">
+            <span class="info-cell__label">温度 {{ temp.Name }}</span>
+            <span class="info-cell__value num">{{ temp.Temperature.toFixed(1) }} °C</span>
+          </div>
           <div class="info-cell">
             <span class="info-cell__label">上行累计 / 实时</span>
             <span class="info-cell__value num">
@@ -291,6 +263,12 @@ watch(
             <span class="info-cell__value num">{{ formatDateTime(server.host?.boot_time) }}</span>
           </div>
           <div class="info-cell">
+            <span class="info-cell__label">运行时长</span>
+            <span class="info-cell__value num">
+              {{ online ? formatUptime(server.state?.uptime) : "-" }}
+            </span>
+          </div>
+          <div class="info-cell">
             <span class="info-cell__label">最后上报</span>
             <span class="info-cell__value num">{{ formatDateTime(server.last_active) }}</span>
           </div>
@@ -298,13 +276,14 @@ watch(
             <span class="info-cell__label">Agent 版本</span>
             <span class="info-cell__value">{{ server.host?.version || "-" }}</span>
           </div>
-          <div class="info-cell" v-for="temp in temperatures" :key="temp.Name">
-            <span class="info-cell__label">温度 {{ temp.Name }}</span>
-            <span class="info-cell__value num">{{ temp.Temperature.toFixed(1) }} °C</span>
-          </div>
         </div>
 
-        <div v-if="note?.planDataMod || note?.billingDataMod" class="info-grid" style="margin-top: 12px">
+        <div
+          v-if="note?.planDataMod || note?.billingDataMod"
+          v-fill-grid
+          class="info-grid"
+          style="margin-top: 12px"
+        >
           <template v-if="note?.planDataMod">
             <div class="info-cell" v-if="note.planDataMod.bandwidth">
               <span class="info-cell__label">带宽</span>
@@ -342,6 +321,45 @@ watch(
             </div>
           </template>
         </div>
+      </section>
+
+      <section class="panel detail-section">
+        <div class="detail-section__head">
+          <h2 class="section-title">历史曲线</h2>
+          <div class="detail-section__tools">
+            <select v-model="metric" class="select" aria-label="指标">
+              <option v-for="item in METRICS" :key="item.key" :value="item.key">
+                {{ item.label }}
+              </option>
+            </select>
+            <div class="seg">
+              <button
+                v-for="item in PERIODS"
+                :key="item.key"
+                type="button"
+                :class="{ 'is-active': period === item.key }"
+                @click="period = item.key"
+              >
+                {{ item.label }}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <p v-if="chartError" class="detail-hint detail-hint--error">
+          曲线读取失败：{{ chartError }}
+        </p>
+        <p v-else-if="!points.length && !chartLoading" class="detail-hint">
+          该时间段暂无历史数据。部分指标需要面板启用 TSDB 后才有记录。
+        </p>
+
+        <MetricChart
+          :points="points"
+          :name="currentMetric.label"
+          :color="currentMetric.color"
+          :formatter="formatter"
+          :loading="chartLoading"
+        />
       </section>
 
       <section v-if="monitors.length" class="panel detail-section">

@@ -4,3 +4,6 @@ dist.zip
 .env.local
 .DS_Store
 *.log
+
+# 浏览器自动化工具产生的临时目录
+.playwright-cli

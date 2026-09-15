@@ -331,7 +331,10 @@ const server = http.createServer((req, res) => {
   if (!filePath.startsWith(DIST) || !fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
     filePath = path.join(DIST, "index.html");
   }
-  res.writeHead(200, { "Content-Type": MIME[path.extname(filePath)] || "application/octet-stream" });
+  const headers = { "Content-Type": MIME[path.extname(filePath)] || "application/octet-stream" };
+  // HTML 不缓存，避免重新构建后仍看到旧页面
+  if (filePath.endsWith(".html")) headers["Cache-Control"] = "no-store";
+  res.writeHead(200, headers);
   fs.createReadStream(filePath).pipe(res);
 });
 

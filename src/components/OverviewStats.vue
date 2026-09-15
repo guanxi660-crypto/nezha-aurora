@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { formatBytes, formatSpeed, formatUptimeShort } from "@/utils/format";
+import { formatBytes, formatUptimeShort } from "@/utils/format";
 import { state, summary } from "@/store/nezha";
 
 const longestUptime = computed(() => {
@@ -64,15 +64,7 @@ const onlineRate = computed(() => {
     <div class="overview-card">
       <div class="overview-card__label">最长运行</div>
       <div class="overview-card__value num">{{ formatUptimeShort(longestUptime) }}</div>
-      <div class="overview-card__foot">当前分组内的最长在线时长</div>
-    </div>
-
-    <div class="overview-card">
-      <div class="overview-card__label">站点版本</div>
-      <div class="overview-card__value num">{{ state.version || "-" }}</div>
-      <div class="overview-card__foot">
-        {{ state.tsdbEnabled ? "TSDB 已启用" : "常规存储模式" }}
-      </div>
+      <div class="overview-card__foot">全部节点中的最长在线时长</div>
     </div>
   </section>
 </template>

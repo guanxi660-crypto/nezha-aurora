@@ -4,7 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#0b1120" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- 使用独立文件名（避免与其它主题残留的 /favicon.svg 冲突）并带版本号破缓存 -->
+    <link rel="icon" type="image/svg+xml" href="/aurora-icon.svg?v=2" />
+    <link rel="shortcut icon" type="image/svg+xml" href="/aurora-icon.svg?v=2" />
+    <link rel="apple-touch-icon" href="/aurora-icon.svg?v=2" />
     <!-- 与官方用户前端一致的图标资源；如需完全离线可自行替换为本地文件 -->
     <link rel="stylesheet" href="https://fastly.jsdelivr.net/gh/lipis/flag-icons@7.0.0/css/flag-icons.min.css" />
     <link rel="stylesheet" href="https://fastly.jsdelivr.net/npm/font-logos@1/assets/font-logos.css" />

@@ -1,20 +1,36 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import CycleTransferPanel from "@/components/CycleTransferPanel.vue";
 import FilterBar from "@/components/FilterBar.vue";
 import OverviewStats from "@/components/OverviewStats.vue";
 import ServerCard from "@/components/ServerCard.vue";
-import ServicePanel from "@/components/ServicePanel.vue";
+import WorldMap from "@/components/WorldMap.vue";
 import { state, visibleServers } from "@/store/nezha";
 
-type ExtraPanel = "none" | "services" | "cycle";
+type ViewMode = "grid" | "map";
 
-const extraPanel = ref<ExtraPanel>(
-  state.runtime.forceShowServices ? "services" : "none",
-);
+const VIEW_KEY = "aurora-view";
 
-const hasServices = computed(() => Object.keys(state.services || {}).length > 0);
-const hasCycle = computed(() => Object.keys(state.cycleTransfer || {}).length > 0);
+function detectView(): ViewMode {
+  if (state.runtime.forceShowMap) return "map";
+  try {
+    const stored = localStorage.getItem(VIEW_KEY);
+    if (stored === "map" || stored === "grid") return stored;
+  } catch {
+    /* ignore */
+  }
+  return "grid";
+}
+
+const view = ref<ViewMode>(detectView());
+
+function setView(next: ViewMode) {
+  view.value = next;
+  try {
+    localStorage.setItem(VIEW_KEY, next);
+  } catch {
+    /* ignore */
+  }
+}
 
 const loading = computed(() => !state.receivedOnce && !state.siteError);
 </script>
@@ -42,36 +58,30 @@ const loading = computed(() => !state.receivedOnce && !state.siteError);
 
       <FilterBar />
 
-      <section v-if="hasServices || hasCycle" class="extra-tabs">
+      <section class="home-toolbar">
         <div class="seg">
           <button
-            v-if="hasServices"
             type="button"
-            :class="{ 'is-active': extraPanel === 'services' }"
-            @click="extraPanel = extraPanel === 'services' ? 'none' : 'services'"
+            :class="{ 'is-active': view === 'grid' }"
+            @click="setView('grid')"
           >
-            服务监控
+            卡片视图
           </button>
           <button
-            v-if="hasCycle"
             type="button"
-            :class="{ 'is-active': extraPanel === 'cycle' }"
-            @click="extraPanel = extraPanel === 'cycle' ? 'none' : 'cycle'"
+            :class="{ 'is-active': view === 'map' }"
+            @click="setView('map')"
           >
-            周期流量
+            世界地图
           </button>
         </div>
       </section>
 
-      <section v-if="extraPanel === 'services' && hasServices" class="extra-body">
-        <ServicePanel :services="state.services" />
+      <section v-if="view === 'map'" class="extra-body">
+        <WorldMap :items="visibleServers" />
       </section>
 
-      <section v-if="extraPanel === 'cycle' && hasCycle" class="extra-body">
-        <CycleTransferPanel :stats="state.cycleTransfer" />
-      </section>
-
-      <section class="server-grid">
+      <section v-else class="server-grid">
         <ServerCard
           v-for="item in visibleServers"
           :key="item.server.id"
@@ -88,7 +98,11 @@ const loading = computed(() => !state.receivedOnce && !state.siteError);
 </template>
 
 <style scoped>
-.extra-tabs {
+.home-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
   margin-top: 16px;
 }
 

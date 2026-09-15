@@ -13,15 +13,14 @@
 
 | 模块 | 说明 |
 | --- | --- |
-| 节点总览 | 在线/离线统计、实时上下行速率、总流量、最长运行时长、站点版本 |
+| 节点总览 | 在线/离线统计、实时上下行速率、总流量、最长运行时长 |
 | 节点卡片 | 系统图标 + 地区旗帜、CPU/内存/磁盘进度条、上下行实时速率、负载、连接数、进程、温度、累计流量 |
-| 分组与筛选 | 按分组标签切换、在线状态过滤、关键字搜索、7 种排序维度（含升降序） |
+| 筛选与排序 | 在线状态过滤、关键字搜索、7 种排序维度（含升降序） |
+| 世界地图 | 按 `country_code` 投影打点，同地区聚合计数、在线脉冲动画、悬浮查看该地区节点并点击进入详情 |
 | 节点详情 | 四环用量总览、CPU/内存/交换/磁盘/网络速率/流量/负载/连接/进程/温度/GPU 历史曲线（1d / 7d / 30d） |
-| 服务监控 | HTTP/TCP/ICMP 可用率、当前与平均延迟、成功/失败次数 |
-| 周期流量 | 月流量规则进度条、剩余额度、重置时间 |
 | 实时性 | WebSocket 推送（`/api/v1/ws/server`），断线自动重连（指数退避） |
-| 外观 | 深/浅色主题持久化、面板自定义代码注入、Logo/背景图/描述/外链、强调色可配置 |
-| 兼容 | 后端 V2 新老字段全容错；移动端卡片单列布局 |
+| 外观 | 深/浅色主题持久化、面板自定义代码注入、Logo/背景图/描述/外链、强调色可配置、右上角管理面板入口 |
+| 兼容 | 后端 V2 新老字段全容错；移动端卡片单列布局；地图数据按需懒加载 |
 
 ---
 
@@ -31,9 +30,8 @@
 
 | 接口 | 用途 |
 | --- | --- |
-| `GET /api/v1/setting` | 站点名称、语言、`custom_code`、版本、TSDB 开关 |
+| `GET /api/v1/setting` | 站点名称、语言、`custom_code`、TSDB 开关（`version` 仅对管理员返回） |
 | `GET /api/v1/server-group` | 分组与节点归属 |
-| `GET /api/v1/service` | 服务监控 + 周期流量 |
 | `GET /api/v1/server/:id/metrics?metric=&period=` | 历史指标曲线 |
 | `GET /api/v1/server/:id/service?period=` | 单节点服务监控延迟 |
 | `WS /api/v1/ws/server` | 实时状态推送 `{ now, online, servers[] }` |
@@ -187,13 +185,13 @@ Aurora 会像官方前端一样读取面板后台「用户前端自定义代码�
   window.CustomMobileBackgroundImage = "https://example.com/bg-mobile.webp"
   window.CustomLinks = '[{"name":"Telegram","link":"https://t.me/xxx"}]'
   window.ForceTheme = "dark"          // 仅作为默认值，用户仍可手动切换
-  window.ForceShowServices = true     // 默认展开服务监控
+  window.ForceShowMap = true          // 默认打开世界地图视图
   window.ShowNetTransfer = true
 
   // —— Aurora 专属配置 ——
   window.AuroraConfig = {
     accentColor: "#38bdf8",   // 强调色（覆盖主题默认渐变）
-    showAdmin: true,          // 头部显示「进入管理面板」入口
+    showAdmin: true,          // 头部「进入管理面板」入口，默认已开启，设为 false 可隐藏
     footerText: "My Status Page"
   }
 </script>
@@ -202,6 +200,12 @@ Aurora 会像官方前端一样读取面板后台「用户前端自定义代码�
 > 背景图与外部字体/CDN 资源若被面板 CSP 拦截，请在面板后台把对应域名加入白名单。
 > Aurora 默认引用了官方前端同款的 `fastly.jsdelivr.net` 旗帜与系统图标样式表；如需完全离线，可自行下载并改为本地引用。
 
+### 关于站点版本与管理入口
+
+- **站点版本**：哪吒后端在访客未登录时会丢弃 `/api/v1/setting` 响应里的 `version` 与 `frontend_templates` 字段，匿名访客拿不到版本号，因此概览区不展示版本，页脚也只在取到版本时才显示。
+- **管理入口**：右上角齿轮按钮指向 `/dashboard`，需要反向代理把该路径转发给面板（示例配置已包含）。
+- **浏览器标签图标**：主题使用独立文件名 `/aurora-icon.svg`，以避免与其它主题残留的 `/favicon.svg` 缓存冲突。切换主题后若图标未更新，强刷一次（Ctrl/Cmd + Shift + R）即可。
+
 ---
 
 ## 目录结构
@@ -209,13 +213,15 @@ Aurora 会像官方前端一样读取面板后台「用户前端自定义代码�
 ```
 src/
 ├── api/           哪吒 V2 接口封装与类型定义
-├── components/    卡片、进度条、环形图、图表、筛选栏等展示组件
+├── components/    卡片、进度条、环形图、图表、世界地图、筛选栏等展示组件
+├── directives/    v-fill-grid：网格最后一行按列自动补齐
 ├── store/         WebSocket 实时状态、站点设置、筛选排序状态
-├── utils/         格式化、自定义代码注入、运行时长/流量/旗帜处理
+├── utils/         格式化、自定义代码注入、国家中心坐标、流量/时长/旗帜处理
 ├── views/         首页总览、节点详情
 └── styles/        设计系统（CSS 变量 + 明暗主题）
 deploy/            Nginx / Caddy 部署示例
-scripts/           主题包打包脚本
+preview/           零依赖演示服务（内置模拟数据，无需面板即可预览）
+scripts/           国家坐标生成、主题包打包脚本
 ```
 
 ---

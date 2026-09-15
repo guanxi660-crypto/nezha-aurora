@@ -25,7 +25,6 @@ export interface PreparedServer {
   online: boolean;
 }
 
-const SERVICE_REFRESH_INTERVAL = 15000;
 const MAX_RECONNECT_DELAY = 15000;
 
 export const state = reactive({
@@ -73,7 +72,6 @@ const MAX_HISTORY_POINTS = 48;
 let started = false;
 let socket: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-let serviceTimer: ReturnType<typeof setInterval> | null = null;
 let reconnectAttempts = 0;
 
 async function loadSite() {
@@ -205,13 +203,8 @@ export function initStore() {
 
   void loadSite();
   void loadGroups();
-  void loadServices();
 
   connectWs();
-
-  serviceTimer = setInterval(() => {
-    void loadServices();
-  }, SERVICE_REFRESH_INTERVAL);
 
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
@@ -219,7 +212,6 @@ export function initStore() {
         reconnectAttempts = 0;
         connectWs();
       }
-      void loadServices();
     }
   });
 }

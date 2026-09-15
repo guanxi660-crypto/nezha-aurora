@@ -162,7 +162,8 @@ export function readRuntimeConfig(): AuroraRuntimeConfig {
     forceShowMap: w.ForceShowMap === true,
     forceShowServices: w.ForceShowServices === true,
     accentColor: typeof plugin.accentColor === "string" ? plugin.accentColor : undefined,
-    showAdmin: plugin.showAdmin === true,
+    // 默认展示「进入管理面板」入口，需要隐藏时在自定义代码里设置 showAdmin: false
+    showAdmin: plugin.showAdmin !== false,
     footerText: typeof plugin.footerText === "string" ? plugin.footerText : undefined,
   };
 }

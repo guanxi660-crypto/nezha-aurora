@@ -32,7 +32,7 @@ const wsLabel = computed(() => {
 <template>
   <header class="app-header">
     <div class="app-header__inner">
-      <div class="brand">
+      <router-link to="/" class="brand" title="返回首页">
         <img
           v-if="state.runtime.logo"
           class="brand__logo"
@@ -44,7 +44,7 @@ const wsLabel = computed(() => {
           <span class="brand__name">{{ state.siteName }}</span>
           <span class="brand__desc">{{ state.siteDesc || "Nezha Monitoring" }}</span>
         </div>
-      </div>
+      </router-link>
 
       <div class="header-spacer" />
 
@@ -57,7 +57,7 @@ const wsLabel = computed(() => {
 
       <a
         v-if="state.runtime.showAdmin"
-        class="icon-btn"
+        class="icon-btn admin-entry"
         href="/dashboard"
         title="进入管理面板"
       >
@@ -65,6 +65,7 @@ const wsLabel = computed(() => {
           <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" />
           <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2v.2a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-2.9-1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 3 15H2.8a2 2 0 1 1 0-4H3a1.7 1.7 0 0 0 1.2-2.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.7 1.7 0 0 0 10 4.1V4a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 2.9 1.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1A1.7 1.7 0 0 0 20.9 11h.1a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
         </svg>
+        <span class="admin-entry__text">管理</span>
       </a>
 
       <button class="icon-btn" type="button" :title="theme === 'dark' ? '切换浅色' : '切换深色'" @click="toggleTheme">
@@ -89,9 +90,54 @@ const wsLabel = computed(() => {
   color: var(--text-faint);
 }
 
-@media (max-width: 520px) {
+.brand {
+  padding: 4px 9px 4px 4px;
+  margin-left: -4px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.18s ease;
+}
+
+.brand:hover {
+  background: var(--accent-soft);
+}
+
+.brand:active {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.admin-entry {
+  width: auto;
+  padding: 0 11px;
+  gap: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.admin-entry__text {
+  font-size: 12.5px;
+  font-weight: 550;
+}
+
+.admin-entry:hover {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+@media (max-width: 640px) {
   .header-status__sep,
   .header-status span:last-child {
+    display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .admin-entry {
+    width: 34px;
+    padding: 0;
+  }
+  .admin-entry__text {
     display: none;
   }
 }

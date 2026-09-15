@@ -785,6 +785,7 @@ select {
   flex-wrap: wrap;
 }
 
+/* 表格式信息网格：1px 缝隙构成分隔线，最后一行的空位由 v-fill-grid 补齐 */
 .info-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
