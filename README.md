@@ -117,35 +117,60 @@ docker run -d --name nezha-aurora --restart unless-stopped \
 
 ## 部署方式二：编译进面板作为内置主题
 
-哪吒 V2 的用户前端是**编译期嵌入**的（`//go:embed *-dist`），且 `user_template` 只能选择 `service/singleton/frontend-templates.yaml` 里列出的主题。
-因此想把它做成面板后台里的“内置主题”，需要自行编译 Dashboard：
+> 只有在你想让 Aurora 出现在面板后台「系统设置 → 主题」的下拉框里时，才需要走这条路。
+> 它要求在 **Linux** 上准备 **Go 1.21+**、**Node 18+**、**git**、**yq**，并且以后每次改前端都要重新编译 Dashboard。
+> 如果只是想把 Aurora 用起来，请用上面的方式一，不需要 Go。
+
+哪吒 V2 的用户前端是**编译期嵌入**的（`cmd/dashboard/main.go` 中的 `//go:embed *-dist`），
+且 `user_template` 只接受 `service/singleton/frontend-templates.yaml` 里登记过的 `path`，所以必须重新编译 Dashboard。
+
+下面的命令在 Linux（bash）中执行，假设 Aurora 源码位于 `/path/to/nezha-aurora`（可 `git clone https://github.com/guanxi660-crypto/nezha-aurora.git` 获取），哪吒源码位于 `/path/to/nezha`。
 
 ```bash
+# 0) 安装 mikefarah 版 yq（fetch 脚本依赖它；注意不要用 Debian 源里那个 Python 版 yq）
+sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/local/bin/yq
+sudo chmod +x /usr/local/bin/yq
+
+# 1) 克隆哪吒源码，并拉取官方内置主题（user-dist / admin-dist 等）
 git clone https://github.com/nezhahq/nezha.git
 cd nezha
+sh script/fetch-frontends.sh
 
-# 1) 构建 Aurora 到 dashboard 的 *-dist 目录（目录名必须以 -dist 结尾）
-npm --prefix /path/to/nezha-aurora run build -- --outDir "$PWD/cmd/dashboard/aurora-dist"
+# 2) 构建 Aurora 到 cmd/dashboard/aurora-dist
+#    outDir 位于项目根之外，必须显式加 --emptyOutDir，否则重复构建不会清空旧产物
+cd /path/to/nezha-aurora
+npm install
+npx vite build --outDir "/path/to/nezha/cmd/dashboard/aurora-dist" --emptyOutDir
 
-# 2) 在 service/singleton/frontend-templates.yaml 中追加一条
-#    - path: aurora-dist
+# 3) 登记主题：编辑 /path/to/nezha/service/singleton/frontend-templates.yaml，追加一条
+#    - path: aurora-dist        # 必须与目录名完全一致，且以 -dist 结尾
 #      name: Aurora
-#      author: you
+#      author: your-name
 #      version: v0.1.0
-#      is_admin: false
+#      is_admin: false          # 用户前端固定为 false
 
-# 3) 编译 Dashboard
-mkdir -p cmd/dashboard/admin-dist cmd/dashboard/user-dist
+# 4) 编译 Dashboard
+cd /path/to/nezha
 go build -o dashboard ./cmd/dashboard
 ```
 
-编译完成后启动面板，即可在「系统设置 → 主题」中选择 Aurora。
+编译完成后启动面板，即可在「系统设置 → 主题」中选择 Aurora；想设为默认，把 `data/config.yaml` 里的 `user_template` 改成 `aurora-dist` 再重启面板。
 
-发布为可下载主题包时，需要把 `dist.zip`（内部顶层目录为 `dist/`）挂到 GitHub Release，并把 `repository` / `version` 填进 `frontend-templates.yaml`：
+几个容易踩的点：
+
+- 目录名**必须以 `-dist` 结尾**，否则 `//go:embed *-dist` 匹配不到；目录名也要和 yaml 里的 `path` 一致。
+- 产物中**不能出现以 `_` 或 `.` 开头的目录**（Go Embed 会直接忽略），`npm run build:theme` 会自动校验。
+- `fetch-frontends.sh` 会删除并重写各主题目录，所以请**先执行它，再构建 Aurora**。
+- 不要在面板源码根目录手动 `mkdir` 空的 `*-dist` 目录：空目录不会被 embed，缺乏内容时面板默认主题就是空的。
+
+如果希望把 Aurora 做成“可下载主题”，让别的面板也能一键切换，可以发布主题包：
 
 ```bash
-npm run build:theme     # 生成 dist.zip，已校验顶层 dist/ 与无 "_" 开头目录
+npm run build:theme     # 生成 dist.zip：附件名固定为 dist.zip，内部顶层目录为 dist/
 ```
+
+把 `dist.zip` 作为 GitHub Release 附件，并在 `frontend-templates.yaml` 中补上 `repository` 与 `version`：
+哪吒的下载脚本按 `{repository}/releases/download/{version}/dist.zip` 拉取，解压后重命名为 `path` 指定的目录名。
 
 ---
 
