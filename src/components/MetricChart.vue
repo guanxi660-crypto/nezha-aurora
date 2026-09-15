@@ -93,7 +93,14 @@ function buildOption(): echarts.EChartsCoreOption {
     },
     dataZoom: props.showZoom
       ? [
-          { type: "inside", throttle: 60 },
+          {
+            type: "inside",
+            throttle: 60,
+            // 不抢占页面滚轮：缩放交给下方滑块，图表内仍可按住拖拽平移
+            zoomOnMouseWheel: false,
+            moveOnMouseWheel: false,
+            moveOnMouseMove: true,
+          },
           {
             type: "slider",
             height: 18,
@@ -137,17 +144,30 @@ function resize() {
   chart?.resize();
 }
 
+/**
+ * 让页面滚动优先于图表缩放。
+ *
+ * ECharts / zrender 会在内部对 wheel 事件调用 preventDefault，
+ * 导致鼠标经过图表时页面滚不动；这里在捕获阶段截断事件，
+ * 使其不进入 ECharts（缩放改由下方滑块完成，拖拽平移不受影响）。
+ */
+function blockWheel(event: WheelEvent) {
+  event.stopPropagation();
+}
+
 onMounted(() => {
   if (!el.value) return;
   chart = echarts.init(el.value, undefined, { renderer: "canvas" });
   render();
   observer = new ResizeObserver(() => resize());
   observer.observe(el.value);
+  el.value.addEventListener("wheel", blockWheel, { capture: true, passive: true });
 });
 
 onBeforeUnmount(() => {
   observer?.disconnect();
   observer = null;
+  el.value?.removeEventListener("wheel", blockWheel, { capture: true });
   chart?.dispose();
   chart = null;
 });
