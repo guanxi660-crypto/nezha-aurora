@@ -173,7 +173,11 @@ watch(
             <span>{{ server.name }}</span>
           </div>
           <div class="detail-hero__sub">
-            <span>{{ getOsName(server.host?.platform) }} {{ server.host?.platform_version }}</span>
+            <span>
+              {{ getOsName(server.host?.platform) }}<template
+                v-if="server.host?.platform_version"
+              > {{ server.host.platform_version }}</template>
+            </span>
             <span>{{ server.host?.arch }}</span>
             <span v-if="cpuCores">{{ cpuCores }} 核</span>
             <span>运行 {{ online ? formatUptime(server.state?.uptime) : "-" }}</span>
@@ -202,7 +206,9 @@ watch(
           <div class="info-cell">
             <span class="info-cell__label">操作系统</span>
             <span class="info-cell__value">
-              {{ getOsName(server.host?.platform) }} {{ server.host?.platform_version }}
+              {{ getOsName(server.host?.platform) }}<template
+                v-if="server.host?.platform_version"
+              > {{ server.host.platform_version }}</template>
             </span>
           </div>
           <div class="info-cell">
@@ -301,9 +307,18 @@ watch(
             <span class="info-cell__label">最后上报</span>
             <span class="info-cell__value num">{{ formatDateTime(server.last_active) }}</span>
           </div>
+          <!--
+            面板对访客会裁剪 Host（see model.Host.Filter）：PlatformVersion、
+            agent Version、GPU 均不下发，因此这里只在确实拿到值时才展示。
+          -->
           <div class="info-cell">
             <span class="info-cell__label">Agent 版本</span>
-            <span class="info-cell__value">{{ server.host?.version || "-" }}</span>
+            <span
+              class="info-cell__value"
+              :title="server.host?.version ? '' : '面板未向访客下发该字段，以管理员身份登录后可见'"
+            >
+              {{ server.host?.version || "访客不可见" }}
+            </span>
           </div>
         </div>
 

@@ -8,6 +8,7 @@ import type {
 } from "@/api/types";
 import { injectCustomCode, readRuntimeConfig, type AuroraRuntimeConfig } from "@/utils/inject";
 import { isServerOnline } from "@/utils/format";
+import { accessToken, clearAccessToken } from "@/utils/auth";
 
 export type StatusFilter = "all" | "online" | "offline";
 export type SortKey =
@@ -26,6 +27,9 @@ export interface PreparedServer {
 }
 
 const MAX_RECONNECT_DELAY = 15000;
+
+/** 配置了访问令牌后，连续被拒绝的 WebSocket 连接次数 */
+let tokenRejectCount = 0;
 
 export const state = reactive({
   /* 站点信息 */
@@ -149,6 +153,7 @@ function connectWs() {
   socket.onopen = () => {
     state.wsConnected = true;
     reconnectAttempts = 0;
+    tokenRejectCount = 0;
   };
 
   socket.onmessage = (event) => {
@@ -163,6 +168,15 @@ function connectWs() {
   socket.onclose = () => {
     state.wsConnected = false;
     socket = null;
+
+    // 令牌失效（过期或被吊销）时后端会持续拒绝连接，这里自动退回访客模式，
+    // 避免一个失效令牌导致整站拿不到数据；访客模式仍能正常展示实时状态。
+    if (accessToken.value && ++tokenRejectCount >= 3) {
+      console.warn("[Aurora] 访问令牌疑似失效，已回退为访客模式");
+      clearAccessToken();
+      tokenRejectCount = 0;
+    }
+
     scheduleReconnect();
   };
 
