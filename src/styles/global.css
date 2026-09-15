@@ -546,16 +546,11 @@ select {
 .server-card__meta {
   margin-top: 3px;
   display: flex;
-  flex-wrap: wrap;
-  gap: 5px 9px;
+  flex-direction: column;
+  gap: 2px;
   font-size: 11.5px;
   color: var(--text-faint);
-}
-
-.server-card__meta span {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+  min-width: 0;
 }
 
 .server-card__state {

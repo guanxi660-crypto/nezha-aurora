@@ -90,12 +90,20 @@ function open() {
           <span class="server-card__name-text">{{ server.name }}</span>
         </div>
         <div class="server-card__meta">
-          <span class="server-card__os">
-            <OsIcon :platform="server.host?.platform" />
-            <span>{{ osName }}<template v-if="platformVersion"> {{ platformVersion }}</template></span>
-          </span>
-          <span v-if="server.host?.arch">{{ server.host.arch }}</span>
-          <span v-if="cpuInfo" class="server-card__cpu">{{ cpuInfo }}</span>
+          <div class="server-card__meta-row">
+            <span class="server-card__os">
+              <OsIcon :platform="server.host?.platform" />
+              <span class="server-card__meta-text">
+                {{ osName }}<template v-if="platformVersion"> {{ platformVersion }}</template>
+              </span>
+            </span>
+            <span v-if="server.host?.arch" class="server-card__meta-fixed">
+              {{ server.host.arch }}
+            </span>
+          </div>
+          <div v-if="cpuInfo" class="server-card__meta-row">
+            <span class="server-card__meta-text">{{ cpuInfo }}</span>
+          </div>
         </div>
       </div>
       <div class="server-card__state">
@@ -159,23 +167,38 @@ function open() {
   flex-shrink: 0;
 }
 
+/* 固定两行：第一行「系统 + 架构」，第二行「CPU」，避免各卡片排版不一致 */
+.server-card__meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 .server-card__os {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  min-width: 0;
+}
+
+/* 必须是块级容器，overflow + text-overflow 才会产生省略号 */
+.server-card__meta-text {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.server-card__meta-fixed {
+  flex-shrink: 0;
 }
 
 .server-card__name-text {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.server-card__cpu {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 190px;
 }
 
 .server-card__uptime {
