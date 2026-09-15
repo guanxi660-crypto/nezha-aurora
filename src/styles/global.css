@@ -827,6 +827,35 @@ select {
   border: 1px solid var(--border);
 }
 
+/* 系统信息固定 5 列：15 项正好排满 3 行；窄屏逐级降列以免内容被挤压 */
+.info-grid--system {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+@media (max-width: 1180px) {
+  .info-grid--system {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 940px) {
+  .info-grid--system {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .info-grid--system {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 460px) {
+  .info-grid--system {
+    grid-template-columns: 1fr;
+  }
+}
+
 .info-cell {
   padding: 12px 14px;
   background: var(--panel-solid);

@@ -177,7 +177,7 @@ watch(
           <h2 class="section-title">系统信息</h2>
         </div>
 
-        <div v-fill-grid class="info-grid">
+        <div v-fill-grid class="info-grid info-grid--system">
           <div class="info-cell">
             <span class="info-cell__label">主机名</span>
             <span class="info-cell__value">{{ server.name }}</span>
