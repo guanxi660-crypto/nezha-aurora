@@ -253,14 +253,14 @@ watch(
             <span class="info-cell__value num">{{ formatDateTime(server.host?.boot_time) }}</span>
           </div>
           <div class="info-cell">
+            <span class="info-cell__label">最后上报</span>
+            <span class="info-cell__value num">{{ formatDateTime(server.last_active) }}</span>
+          </div>
+          <div class="info-cell">
             <span class="info-cell__label">运行时长</span>
             <span class="info-cell__value num">
               {{ online ? formatUptime(server.state?.uptime) : "-" }}
             </span>
-          </div>
-          <div class="info-cell">
-            <span class="info-cell__label">最后上报</span>
-            <span class="info-cell__value num">{{ formatDateTime(server.last_active) }}</span>
           </div>
         </div>
 
