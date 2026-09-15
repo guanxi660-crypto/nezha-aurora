@@ -1,17 +1,13 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { isServerOnline } from "@/utils/format";
-import { state } from "@/store/nezha";
+import { onlineServers, state } from "@/store/nezha";
 import { theme, toggleTheme } from "@/store/theme";
 
 const logoMark = computed(() =>
   state.runtime.logo ? "" : (state.siteName || "N").trim().charAt(0).toUpperCase(),
 );
 
-const onlineTotal = computed(() => {
-  if (state.onlineCount) return state.onlineCount;
-  return state.servers.filter((server) => isServerOnline(state.now, server)).length;
-});
+const onlineTotal = computed(() => onlineServers.value);
 
 const total = computed(() => state.servers.length);
 
@@ -48,7 +44,12 @@ const wsLabel = computed(() => {
 
       <div class="header-spacer" />
 
-      <span class="chip header-status" :title="updatedAt ? `最后更新 ${updatedAt}` : ''">
+      <span
+        class="chip header-status"
+        :title="`在线节点 ${onlineTotal}/${total} · 在线用户 ${state.onlineUsers}${
+          updatedAt ? ` · 最后更新 ${updatedAt}` : ''
+        }`"
+      >
         <i class="dot" :class="state.wsConnected ? 'dot--online' : 'dot--offline'" />
         <span class="num">{{ onlineTotal }}/{{ total }}</span>
         <span class="header-status__sep">·</span>

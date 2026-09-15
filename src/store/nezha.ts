@@ -45,7 +45,8 @@ export const state = reactive({
   /* 实时状态 */
   now: 0,
   servers: [] as NezhaServer[],
-  onlineCount: 0,
+  /** 注意：后端 WS 的 online 字段是在线「用户」数，不是在线节点数 */
+  onlineUsers: 0,
   wsConnected: false,
   receivedOnce: false,
 
@@ -146,16 +147,12 @@ function pushHistory(servers: NezhaServer[]) {
 
 function applyPayload(payload: { now: number; online?: number; servers?: NezhaServer[] }) {
   if (typeof payload.now === "number") state.now = payload.now;
-  if (Array.isArray(payload.servers)) state.servers = payload.servers;
-  if (typeof payload.online === "number") state.onlineCount = payload.online;
-  state.receivedOnce = true;
-  if (Array.isArray(payload.servers)) pushHistory(payload.servers);
-  if (!state.filter.group || state.filter.group === "all") {
-    state.onlineCount =
-      typeof payload.online === "number"
-        ? payload.online
-        : state.servers.filter((server) => isServerOnline(state.now, server)).length;
+  if (Array.isArray(payload.servers)) {
+    state.servers = payload.servers;
+    pushHistory(payload.servers);
   }
+  if (typeof payload.online === "number") state.onlineUsers = payload.online;
+  state.receivedOnce = true;
 }
 
 function connectWs() {
@@ -217,6 +214,11 @@ export function initStore() {
 }
 
 /* ---------------- 派生数据 ---------------- */
+
+/** 在线节点数：必须按 last_active 自行判定（后端 online 字段是在线用户数） */
+export const onlineServers = computed(
+  () => state.servers.filter((server) => isServerOnline(state.now, server)).length,
+);
 
 export const groupNames = computed(() =>
   state.groups.map((item) => item.group.name).filter(Boolean),

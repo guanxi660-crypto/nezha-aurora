@@ -398,7 +398,9 @@ server.on("upgrade", (req, socket) => {
         encodeTextFrame(
           JSON.stringify({
             now: NOW + tick * PUSH_INTERVAL,
-            online: servers.filter((item) => item.last_active > new Date(NOW - 60000).toISOString()).length,
+            // 与真实后端一致：该字段是在线「用户」数，并非在线节点数，
+            // 前端应自行按 last_active 判定节点在线状态。
+            online: 7,
             servers,
           }),
         ),
