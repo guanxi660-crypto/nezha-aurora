@@ -15,6 +15,7 @@ import {
   isServerOnline,
   parsePublicNote,
   percent,
+  temperatureValue,
 } from "@/utils/format";
 import { serverById, state } from "@/store/nezha";
 
@@ -87,6 +88,24 @@ const diskPercent = computed(() => percent(server.value?.state?.disk_used, serve
 const swapPercent = computed(() => percent(server.value?.state?.swap_used, server.value?.host?.swap_total));
 
 const temperatures = computed(() => server.value?.state?.temperatures || []);
+
+/** GPU 列表：型号 + 利用率 + 显存（后端 GPUStat 显存单位为 MiB） */
+const gpuStats = computed(() => {
+  const names = server.value?.host?.gpu || [];
+  const state = server.value?.state;
+  const mib = 1024 * 1024;
+  return names.map((name, index) => {
+    const stat = state?.gpus?.[index];
+    const rawUtilization = stat?.utilization ?? state?.gpu?.[index];
+    return {
+      name,
+      hasUtilization: rawUtilization !== undefined && rawUtilization !== null,
+      utilization: Number(rawUtilization) || 0,
+      memUsed: stat?.memory_used ? stat.memory_used * mib : 0,
+      memTotal: stat?.memory_total ? stat.memory_total * mib : 0,
+    };
+  });
+});
 
 const cpuCores = computed(() => server.value?.host?.cpu?.length || 0);
 
@@ -194,11 +213,19 @@ watch(
             <span class="info-cell__label">CPU</span>
             <span class="info-cell__value">{{ server.host?.cpu?.[0] || "-" }}</span>
           </div>
-          <div class="info-cell">
-            <span class="info-cell__label">GPU</span>
+          <div class="info-cell" v-for="(gpu, index) in gpuStats" :key="`gpu-${index}`">
+            <span class="info-cell__label">GPU{{ gpuStats.length > 1 ? ` ${index + 1}` : "" }}</span>
             <span class="info-cell__value">
-              {{ server.host?.gpu?.length ? server.host.gpu.join(", ") : "-" }}
+              {{ gpu.name }}
+              <template v-if="gpu.hasUtilization"> · {{ gpu.utilization.toFixed(1) }}%</template>
+              <template v-if="gpu.memTotal">
+                · {{ formatBytes(gpu.memUsed, 1) }} / {{ formatBytes(gpu.memTotal, 1) }}
+              </template>
             </span>
+          </div>
+          <div v-if="!gpuStats.length" class="info-cell">
+            <span class="info-cell__label">GPU</span>
+            <span class="info-cell__value">-</span>
           </div>
           <div class="info-cell">
             <span class="info-cell__label">内存</span>
@@ -240,9 +267,11 @@ watch(
             <span class="info-cell__label">温度</span>
             <span class="info-cell__value">-</span>
           </div>
-          <div class="info-cell" v-for="temp in temperatures" :key="temp.Name">
-            <span class="info-cell__label">温度 {{ temp.Name }}</span>
-            <span class="info-cell__value num">{{ temp.Temperature.toFixed(1) }} °C</span>
+          <div class="info-cell" v-for="(temp, index) in temperatures" :key="`temp-${index}`">
+            <span class="info-cell__label">
+              温度 {{ temp.Name || temp.name || index + 1 }}
+            </span>
+            <span class="info-cell__value num">{{ temperatureValue(temp).toFixed(1) }} °C</span>
           </div>
           <div class="info-cell">
             <span class="info-cell__label">上行累计 / 实时</span>

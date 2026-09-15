@@ -1,4 +1,14 @@
-import type { NezhaServer } from "@/api/types";
+import type { NezhaServer, NezhaTemperature } from "@/api/types";
+
+/**
+ * 温度取值兼容两种序列化形式。
+ * 后端 model.SensorTemperature 未声明 json tag，默认输出 Name / Temperature；
+ * 部分链路或旧版本可能输出小写，这里统一兜底。
+ */
+export function temperatureValue(item: NezhaTemperature): number {
+  const value = Number(item.Temperature ?? item.temperature);
+  return Number.isFinite(value) ? value : 0;
+}
 
 /** 字节数格式化，自动选择单位 */
 export function formatBytes(bytes?: number, decimals = 2): string {

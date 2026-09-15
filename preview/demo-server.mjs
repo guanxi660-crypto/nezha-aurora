@@ -160,7 +160,8 @@ function buildServer(node, tick) {
       process_count: online ? Math.round(jitter(180)) : 0,
       temperatures: online ? [{ Name: "cpu", Temperature: Number(jitter(46).toFixed(1)) }] : null,
       gpu: node.gpu ? [jitter(38)] : null,
-      gpus: node.gpu ? [{ utilization: jitter(38), memory_used: 6e9, memory_total: 24e9 }] : undefined,
+      // 显存单位与后端 GPUStat 一致，为 MiB
+      gpus: node.gpu ? [{ utilization: jitter(38), memory_used: 6144, memory_total: 24576 }] : undefined,
     },
   };
 }

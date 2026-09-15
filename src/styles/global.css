@@ -688,14 +688,47 @@ select {
   white-space: nowrap;
 }
 
+/* footer 单行约束依赖容器查询，这里把卡片声明为宽度容器 */
+.server-card {
+  container-type: inline-size;
+}
+
+/* 固定单行：所有卡片底部指标一行排布，不因内容多少换行 */
 .server-card__foot {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 6px 12px;
-  font-size: 11.5px;
+  gap: 5px;
+  font-size: 10px;
+  line-height: 1.5;
   color: var(--text-faint);
-  padding-top: 2px;
+  padding-top: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.server-card__foot > .foot-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* 流量是核心指标，始终完整展示 */
+.server-card__foot > .foot-item--flow {
+  flex-shrink: 0;
+}
+
+/* 带宽等可选项：卡片偏窄时整项隐藏，避免挤压关键数据或留下残字 */
+.server-card__foot > .foot-item--optional {
+  display: none;
+}
+
+@container (min-width: 420px) {
+  .server-card__foot > .foot-item--optional {
+    display: inline-flex;
+  }
 }
 
 .server-card__foot b {

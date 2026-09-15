@@ -20,6 +20,9 @@ export interface NezhaServerHost {
 export interface NezhaTemperature {
   Name: string;
   Temperature: number;
+  /** 兼容小写序列化差异，部分链路可能输出 name / temperature */
+  name?: string;
+  temperature?: number;
 }
 
 export interface NezhaGpuState {

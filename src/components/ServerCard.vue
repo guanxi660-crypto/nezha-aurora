@@ -12,6 +12,7 @@ import {
   getOsName,
   parsePublicNote,
   percent,
+  temperatureValue,
 } from "@/utils/format";
 
 const props = defineProps<{
@@ -46,19 +47,70 @@ const note = computed(() => parsePublicNote(props.server.public_note));
 const loadText = computed(() => {
   const s = props.server.state;
   if (!props.online || !s) return "-";
-  return `${(s.load_1 || 0).toFixed(2)} / ${(s.load_5 || 0).toFixed(2)} / ${(s.load_15 || 0).toFixed(2)}`;
+  return `${(s.load_1 || 0).toFixed(2)}/${(s.load_5 || 0).toFixed(2)}/${(s.load_15 || 0).toFixed(2)}`;
 });
 
 const connText = computed(() => {
   const s = props.server.state;
   if (!props.online || !s) return "-";
-  return `${s.tcp_conn_count || 0} / ${s.udp_conn_count || 0}`;
+  return `${s.tcp_conn_count || 0}/${s.udp_conn_count || 0}`;
+});
+
+const processText = computed(() => {
+  const s = props.server.state;
+  if (!props.online || !s) return "-";
+  const value = s.process_count;
+  return value === undefined || value === null ? "-" : String(value);
+});
+
+/** 出/入站累计流量，紧凑写法以压缩占用宽度 */
+const flowText = computed(() => {
+  const s = props.server.state;
+  if (!props.online || !s) return "-";
+  return `${formatBytes(s.net_out_transfer, 1)}↑ ${formatBytes(s.net_in_transfer, 1)}↓`;
 });
 
 const tempText = computed(() => {
   const temps = props.server.state?.temperatures;
   if (!props.online || !temps || !temps.length) return "";
-  return `${Math.max(...temps.map((t) => t.Temperature)).toFixed(0)}°C`;
+  const max = Math.max(...temps.map(temperatureValue));
+  return max > 0 ? `${max.toFixed(0)}°C` : "";
+});
+
+/** 温度放入 CPU 进度条下方，避免底部指标行过长导致换行 */
+const tempHint = computed(() => (tempText.value ? `温度 ${tempText.value}` : ""));
+
+/** GPU：型号取自 host.gpu，利用率/显存取自 state.gpus（旧 Agent 仅有 state.gpu 利用率） */
+const gpuInfo = computed(() => {
+  const names = props.server.host?.gpu || [];
+  if (!names.length) return null;
+
+  const state = props.server.state;
+  const stat = state?.gpus?.[0];
+  const utilization = Number(stat?.utilization ?? state?.gpu?.[0] ?? 0) || 0;
+
+  // 后端 GPUStat 显存单位为 MiB
+  const mib = 1024 * 1024;
+  return {
+    name: names[0],
+    count: names.length,
+    utilization,
+    memUsed: stat?.memory_used ? stat.memory_used * mib : 0,
+    memTotal: stat?.memory_total ? stat.memory_total * mib : 0,
+  };
+});
+
+const gpuLabel = computed(() => {
+  const gpu = gpuInfo.value;
+  if (!gpu) return "";
+  return gpu.count > 1 ? `GPU ×${gpu.count}` : "GPU";
+});
+
+const gpuHint = computed(() => {
+  const gpu = gpuInfo.value;
+  if (!gpu) return "";
+  if (!gpu.memTotal) return gpu.name;
+  return `${gpu.name} · 显存 ${formatBytes(gpu.memUsed, 1)} / ${formatBytes(gpu.memTotal, 1)}`;
 });
 
 const cpuInfo = computed(() => {
@@ -116,9 +168,13 @@ function open() {
     </header>
 
     <div class="metrics">
-      <UsageBar label="CPU" :value="cpu" />
+      <UsageBar label="CPU" :value="cpu" :hint="tempHint" />
       <UsageBar label="内存" :value="memPercent" :hint="memHint" />
       <UsageBar label="磁盘" :value="diskPercent" :hint="diskHint" />
+    </div>
+
+    <div v-if="gpuInfo" class="gpu-metric">
+      <UsageBar :label="gpuLabel" :value="gpuInfo.utilization" :hint="gpuHint" />
     </div>
 
     <div class="net-row">
@@ -147,20 +203,23 @@ function open() {
     </div>
 
     <footer class="server-card__foot">
-      <span>负载 <b class="num">{{ loadText }}</b></span>
-      <span>连接 <b class="num">{{ connText }}</b></span>
-      <span v-if="online">进程 <b class="num">{{ server.state?.process_count ?? "-" }}</b></span>
-      <span v-if="tempText">温度 <b class="num">{{ tempText }}</b></span>
-      <span>
-        流量 <b class="num">{{ formatBytes(server.state?.net_out_transfer, 1) }}</b> ↑ /
-        <b class="num">{{ formatBytes(server.state?.net_in_transfer, 1) }}</b> ↓
+      <span class="foot-item">负载<b class="num">{{ loadText }}</b></span>
+      <span class="foot-item">连接<b class="num">{{ connText }}</b></span>
+      <span class="foot-item">进程<b class="num">{{ processText }}</b></span>
+      <span v-if="note?.planDataMod?.bandwidth" class="foot-item foot-item--optional">
+        带宽<b class="num">{{ note.planDataMod.bandwidth }}</b>
       </span>
-      <span v-if="note?.planDataMod?.bandwidth">带宽 <b>{{ note.planDataMod.bandwidth }}</b></span>
+      <span class="foot-item foot-item--flow">流量<b class="num">{{ flowText }}</b></span>
     </footer>
   </article>
 </template>
 
 <style scoped>
+/* GPU 监控条：只有带 GPU 的节点才会渲染，独占一行避免挤压 CPU/内存/磁盘 */
+.gpu-metric {
+  margin-top: 2px;
+}
+
 .server-card__flag {
   font-size: 14px;
   line-height: 1;
