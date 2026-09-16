@@ -180,8 +180,12 @@ onMounted(async () => {
             @mousemove="moveTooltip($event)"
             @mouseleave="hideTooltip"
           >
-            <!-- 透明命中区：扩大可交互范围，不必精确瞄准小圆点 -->
-            <circle class="world-map__hit" :cx="cluster.x" :cy="cluster.y" :r="15" />
+            <!--
+              透明命中区：扩大可交互范围，不必精确瞄准小圆点。
+              半径需克制——相邻圆点最近间距可能只有 11px 左右（欧洲区），
+              命中区过大时重叠部分会命中后绘制的节点而不是鼠标瞄准的那个。
+            -->
+            <circle class="world-map__hit" :cx="cluster.x" :cy="cluster.y" :r="9" />
             <circle
               class="world-map__pulse"
               :class="cluster.offline ? 'is-offline' : 'is-online'"
