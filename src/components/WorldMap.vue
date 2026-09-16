@@ -68,11 +68,36 @@ const locatedCount = computed(() =>
 
 const tooltip = ref<{ x: number; y: number; cluster: Cluster } | null>(null);
 
+/** 位置更新走 rAF 节流；mousemove 触发频率远高于渲染帧，直连会造成大量无谓更新 */
+let moveFrame = 0;
+
 function showTooltip(cluster: Cluster, event: MouseEvent) {
+  // 同一个圆点内移动时只刷新坐标，避免反复重建整个国家列表
+  if (tooltip.value?.cluster === cluster) {
+    moveTooltip(event);
+    return;
+  }
   tooltip.value = { x: event.offsetX, y: event.offsetY, cluster };
 }
 
+function moveTooltip(event: MouseEvent) {
+  if (moveFrame) return;
+  const x = event.offsetX;
+  const y = event.offsetY;
+  moveFrame = requestAnimationFrame(() => {
+    moveFrame = 0;
+    const current = tooltip.value;
+    if (!current) return;
+    current.x = x;
+    current.y = y;
+  });
+}
+
 function hideTooltip() {
+  if (moveFrame) {
+    cancelAnimationFrame(moveFrame);
+    moveFrame = 0;
+  }
   tooltip.value = null;
 }
 
@@ -152,9 +177,11 @@ onMounted(async () => {
             :key="cluster.code"
             class="world-map__node"
             @mouseenter="showTooltip(cluster, $event)"
-            @mousemove="showTooltip(cluster, $event)"
+            @mousemove="moveTooltip($event)"
             @mouseleave="hideTooltip"
           >
+            <!-- 透明命中区：扩大可交互范围，不必精确瞄准小圆点 -->
+            <circle class="world-map__hit" :cx="cluster.x" :cy="cluster.y" :r="15" />
             <circle
               class="world-map__pulse"
               :class="cluster.offline ? 'is-offline' : 'is-online'"
@@ -194,23 +221,26 @@ onMounted(async () => {
             在线 {{ tooltip.cluster.online }} / 离线 {{ tooltip.cluster.offline }}
           </span>
         </div>
-        <button
-          v-for="entry in tooltip.cluster.entries"
-          :key="entry.server.id"
-          type="button"
-          class="world-map__tooltip-item"
-          @click="openServer(entry.server.id)"
-        >
-          <i class="dot" :class="entry.online ? 'dot--online' : 'dot--offline'" />
-          <span class="world-map__tooltip-name">{{ entry.server.name }}</span>
-          <span class="world-map__tooltip-meta num">
-            CPU {{ (entry.server.state?.cpu || 0).toFixed(0) }}% ·
-            内存 {{ percent(entry.server.state?.mem_used, entry.server.host?.mem_total).toFixed(0) }}%
-            <template v-if="entry.online">
-              · ↓{{ formatSpeed(entry.server.state?.net_in_speed, 1) }}
-            </template>
-          </span>
-        </button>
+        <!-- 单个国家的节点可能很多，限高滚动避免 tooltip 撑满整屏 -->
+        <div class="world-map__tooltip-list">
+          <button
+            v-for="entry in tooltip.cluster.entries"
+            :key="entry.server.id"
+            type="button"
+            class="world-map__tooltip-item"
+            @click="openServer(entry.server.id)"
+          >
+            <i class="dot" :class="entry.online ? 'dot--online' : 'dot--offline'" />
+            <span class="world-map__tooltip-name">{{ entry.server.name }}</span>
+            <span class="world-map__tooltip-meta num">
+              CPU {{ (entry.server.state?.cpu || 0).toFixed(0) }}% ·
+              内存 {{ percent(entry.server.state?.mem_used, entry.server.host?.mem_total).toFixed(0) }}%
+              <template v-if="entry.online">
+                · ↓{{ formatSpeed(entry.server.state?.net_in_speed, 1) }}
+              </template>
+            </span>
+          </button>
+        </div>
       </div>
     </template>
   </div>
@@ -284,8 +314,18 @@ onMounted(async () => {
   r: 7;
 }
 
+/* 透明命中区：扩大可交互范围，避免必须精确瞄准小圆点才能触发 */
+.world-map__hit {
+  fill: transparent;
+  stroke: none;
+}
+
 .world-map__pulse {
   opacity: 0.3;
+  /* 用 transform 缩放替代动画 r 属性：r 动画每帧都要重绘 SVG，节点多时明显拖慢主线程 */
+  transform-box: fill-box;
+  transform-origin: center;
+  will-change: transform, opacity;
 }
 
 .world-map__pulse.is-online {
@@ -310,15 +350,12 @@ onMounted(async () => {
 
 @keyframes map-pulse {
   0% {
-    r: 5;
-    opacity: 0.45;
+    transform: scale(0.6);
+    opacity: 0.5;
   }
-  70% {
-    r: 14;
-    opacity: 0;
-  }
+  70%,
   100% {
-    r: 14;
+    transform: scale(1.8);
     opacity: 0;
   }
 }
@@ -354,6 +391,14 @@ onMounted(async () => {
   font-size: 11px;
   font-weight: 500;
   color: var(--text-faint);
+}
+
+.world-map__tooltip-list {
+  max-height: 264px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin: 0 -4px;
+  padding: 0 4px;
 }
 
 .world-map__tooltip-item {
