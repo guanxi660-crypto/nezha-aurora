@@ -67,38 +67,95 @@ const locatedCount = computed(() =>
 );
 
 const tooltip = ref<{ x: number; y: number; cluster: Cluster } | null>(null);
+const svgEl = ref<SVGSVGElement | null>(null);
 
-/** 位置更新走 rAF 节流；mousemove 触发频率远高于渲染帧，直连会造成大量无谓更新 */
+/**
+ * 命中判定说明：
+ * 早期直接用 SVG 原生 hover，有两个缺陷——圆与圆之间有空隙，鼠标穿行时会不断
+ * 触发 mouseleave/mouseenter 导致 tooltip 闪烁；密集区又只能靠「后绘制者在上层」
+ * 决定命中谁。所以改为在 svg 上统一做「最近圆点优先」判定。
+ */
+/** 判定为命中的最大距离（viewBox 坐标）；上限受最近邻间距约束，不宜过大 */
+const HIT_RADIUS = 15;
+/** 移出后延迟隐藏，给鼠标在相邻圆点之间穿行留出缓冲，消除闪烁 */
+const HIDE_DELAY = 150;
+
+let hideTimer = 0;
 let moveFrame = 0;
+let pointer = { x: 0, y: 0 };
 
-function showTooltip(cluster: Cluster, event: MouseEvent) {
-  // 同一个圆点内移动时只刷新坐标，避免反复重建整个国家列表
-  if (tooltip.value?.cluster === cluster) {
-    moveTooltip(event);
-    return;
-  }
-  tooltip.value = { x: event.offsetX, y: event.offsetY, cluster };
+function cancelHide() {
+  if (!hideTimer) return;
+  clearTimeout(hideTimer);
+  hideTimer = 0;
 }
 
-function moveTooltip(event: MouseEvent) {
+function scheduleHide() {
+  if (hideTimer) return;
+  hideTimer = window.setTimeout(() => {
+    hideTimer = 0;
+    tooltip.value = null;
+  }, HIDE_DELAY);
+}
+
+function onMapMove(event: MouseEvent) {
+  pointer = { x: event.clientX, y: event.clientY };
   if (moveFrame) return;
-  const x = event.offsetX;
-  const y = event.offsetY;
   moveFrame = requestAnimationFrame(() => {
     moveFrame = 0;
-    const current = tooltip.value;
-    if (!current) return;
-    current.x = x;
-    current.y = y;
+    applyHover();
   });
 }
 
-function hideTooltip() {
-  if (moveFrame) {
-    cancelAnimationFrame(moveFrame);
-    moveFrame = 0;
+function onMapLeave() {
+  scheduleHide();
+}
+
+function applyHover() {
+  const svg = svgEl.value;
+  if (!svg) return;
+
+  const rect = svg.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+
+  const scale = WIDTH / rect.width;
+  const px = (pointer.x - rect.left) * scale;
+  const py = (pointer.y - rect.top) * scale;
+
+  let best: Cluster | null = null;
+  let bestDistance = Infinity;
+  for (const cluster of clusters.value) {
+    const distance = Math.hypot(cluster.x - px, cluster.y - py);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = cluster;
+    }
   }
-  tooltip.value = null;
+
+  if (!best || bestDistance > HIT_RADIUS) {
+    scheduleHide();
+    return;
+  }
+
+  cancelHide();
+
+  // tooltip 相对 .world-map 容器定位
+  const host = svg.parentElement?.getBoundingClientRect() ?? rect;
+  const x = pointer.x - host.left;
+  const y = pointer.y - host.top;
+
+  const current = tooltip.value;
+  // 必须按 code 比较：clusters 是 computed，WS 每秒推送都会重建全部对象，
+  // 用引用比较会导致每秒判定一次「切换国家」，列表被反复重建。
+  if (current?.cluster.code === best.code) {
+    current.x = x;
+    current.y = y;
+    // 同步最新快照，保证 tooltip 内的实时数据跟着刷新
+    current.cluster = best;
+    return;
+  }
+
+  tooltip.value = { x, y, cluster: best };
 }
 
 function openServer(id: number) {
@@ -166,7 +223,15 @@ onMounted(async () => {
         <span class="chip num">{{ locatedCount }}/{{ items.length }} 个节点可定位</span>
       </div>
 
-      <svg :viewBox="`0 0 ${WIDTH} ${HEIGHT}`" preserveAspectRatio="xMidYMid meet" role="img" aria-label="节点世界分布">
+      <svg
+        ref="svgEl"
+        :viewBox="`0 0 ${WIDTH} ${HEIGHT}`"
+        preserveAspectRatio="xMidYMid meet"
+        role="img"
+        aria-label="节点世界分布"
+        @mousemove="onMapMove"
+        @mouseleave="onMapLeave"
+      >
         <g class="world-map__land">
           <path v-for="(path, index) in landPaths" :key="index" :d="path" />
         </g>
@@ -176,9 +241,7 @@ onMounted(async () => {
             v-for="cluster in clusters"
             :key="cluster.code"
             class="world-map__node"
-            @mouseenter="showTooltip(cluster, $event)"
-            @mousemove="moveTooltip($event)"
-            @mouseleave="hideTooltip"
+            :class="{ 'is-active': tooltip?.cluster.code === cluster.code }"
           >
             <!--
               透明命中区：扩大可交互范围，不必精确瞄准小圆点。
@@ -218,6 +281,8 @@ onMounted(async () => {
         v-if="tooltip"
         class="world-map__tooltip"
         :style="{ left: `${tooltip.x}px`, top: `${tooltip.y}px` }"
+        @mouseenter="cancelHide"
+        @mouseleave="scheduleHide"
       >
         <div class="world-map__tooltip-head">
           {{ countryFlag(tooltip.cluster.code) }} {{ tooltip.cluster.code }}
@@ -314,7 +379,8 @@ onMounted(async () => {
   stroke-width: 2;
 }
 
-.world-map__node:hover .world-map__dot {
+/* 高亮跟随 JS 的最近点判定，而不是浏览器原生 hover，保证指示与 tooltip 一致 */
+.world-map__node.is-active .world-map__dot {
   r: 7;
 }
 
@@ -373,9 +439,12 @@ onMounted(async () => {
   padding: 9px 10px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-strong);
-  background: color-mix(in srgb, var(--panel-solid) 94%, transparent);
+  /*
+   * 这里刻意不用 backdrop-filter：它每次弹出都要对背景重新采样模糊，
+   * 叠加在频繁出现/消失的浮层上会明显拖慢悬停响应。
+   */
+  background: color-mix(in srgb, var(--panel-solid) 97%, transparent);
   box-shadow: var(--shadow-pop);
-  backdrop-filter: blur(12px);
   pointer-events: auto;
 }
 
