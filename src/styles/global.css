@@ -458,9 +458,11 @@ select {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent);
 }
 
+/* 离线指示灯取“熄灭”语义：转暗灰并去掉光晕，而不是继续亮红灯 */
 .dot--offline {
-  background: var(--danger);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 22%, transparent);
+  background: var(--text-faint);
+  box-shadow: none;
+  opacity: 0.55;
 }
 
 /* ---------- 服务器卡片 ---------- */
@@ -516,8 +518,10 @@ select {
   opacity: 1;
 }
 
+/* 离线卡片整体压暗并降饱和，和在线卡片形成明显的“灭灯”对比 */
 .server-card--offline {
-  opacity: 0.72;
+  opacity: 0.55;
+  filter: saturate(0.35);
 }
 
 .server-card__head {
