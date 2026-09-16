@@ -87,7 +87,8 @@ export function formatDateTime(input?: string | number): string {
   if (input === undefined || input === null || input === "") return "-";
   const date =
     typeof input === "number" ? new Date(input * 1000) : new Date(String(input));
-  if (Number.isNaN(date.getTime())) return "-";
+  // Go time.Time 的零值是 0001-01-01，语义为「从未上报」，不能渲染成公元 1 年
+  if (Number.isNaN(date.getTime()) || date.getFullYear() < 2000) return "-";
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(
     date.getHours(),

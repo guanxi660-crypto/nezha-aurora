@@ -524,6 +524,12 @@ select {
   filter: saturate(0.35);
 }
 
+/* 离线节点的详情页：整页压暗降饱和（透明度略高于卡片，保证历史曲线仍可读） */
+.detail-view--offline {
+  opacity: 0.62;
+  filter: saturate(0.4);
+}
+
 .server-card__head {
   display: flex;
   align-items: flex-start;

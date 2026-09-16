@@ -131,7 +131,8 @@ watch(
 </script>
 
 <template>
-  <div>
+  <!-- 离线节点整页压暗降饱和，与首页离线卡片保持一致的“断电”观感 -->
+  <div class="detail-view" :class="{ 'detail-view--offline': server && !online }">
     <div v-if="!server" class="state-block">
       <span class="spinner" />
       <p>正在读取节点数据…</p>
