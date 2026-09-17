@@ -78,7 +78,78 @@ npm run build:theme    # 额外生成 dist.zip（哪吒主题发布包）
 
 ---
 
-## 部署方式一：静态前端 + 反向代理（推荐）
+## 部署：Docker（最简，推荐）
+
+镜像由 GitHub Actions 在线构建后推送到 GHCR，**直接拉取即可**，服务器上不需要 Node 环境。
+容器内已内置 Nginx 反代（`/api/v1`、WebSocket、`/dashboard`），所以**单容器就能跑通**，不必再单独写反代配置。
+
+### 1. 拉取并启动
+
+```bash
+docker run -d \
+  --name nezha-aurora \
+  --restart unless-stopped \
+  -p 8080:80 \
+  -e NEZHA_BACKEND=https://your-panel.example.com \
+  ghcr.io/guanxi660-crypto/nezha-aurora:latest
+```
+
+打开 `http://<服务器IP>:8080` 即可。
+
+> 仓库的 Package 默认可能是私有的，首次使用请到 GitHub 仓库 → 右侧 **Packages** → `nezha-aurora` → **Package settings** 把可见性改为 **Public**。
+> 若想保持私有，就先 `echo <你的PAT> | docker login ghcr.io -u <用户名> --password-stdin` 再拉取。
+
+### 2. 环境变量
+
+| 变量 | 说明 | 默认值 |
+| --- | --- | --- |
+| `NEZHA_BACKEND` | 哪吒面板地址（含协议）。作为 `/api/v1`、WebSocket、`/dashboard` 的反代目标 | `http://host.docker.internal:8008` |
+| `NEZHA_GRPC_BACKEND` | Agent 上报通道（gRPC）目标，**不含协议**。未设置时自动从 `NEZHA_BACKEND` 推导 | 由上一项推导 |
+
+按面板位置选择写法：
+
+- 面板跑在**宿主机**上：`-e NEZHA_BACKEND=http://host.docker.internal:8008`，Linux 需追加 `--add-host=host.docker.internal:host-gateway`
+- 面板是**另一个容器**：`-e NEZHA_BACKEND=http://nezha:8008`，并确保两者在同一 Docker 网络
+- 面板在**其它服务器**：`-e NEZHA_BACKEND=https://panel.example.com`
+
+### 3. docker compose
+
+```yaml
+services:
+  aurora:
+    image: ghcr.io/guanxi660-crypto/nezha-aurora:latest
+    container_name: nezha-aurora
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    environment:
+      NEZHA_BACKEND: http://host.docker.internal:8008
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+```
+
+### 4. 本地构建镜像
+
+```bash
+npm run docker:build     # 等价于 docker build -t nezha-aurora .
+npm run docker:run       # 起一个连宿主机面板的本地容器
+```
+
+或者完全手动：
+
+```bash
+docker build -t nezha-aurora .
+docker run -d --name nezha-aurora -p 8080:80 \
+  -e NEZHA_BACKEND=https://status.example.com \
+  nezha-aurora
+```
+
+> 想上 HTTPS，用宿主机的 Nginx / Caddy 再反代到本容器的 `80` 端口即可。
+> 若希望本容器直接接管整个域名（含 Agent 上报），模板里已预留 `/proto.NezhaService/` 的 gRPC 转发段。
+
+---
+
+## 部署方式一：静态前端 + 反向代理
 
 前端请求同源的 `/api/`，因此必须由 Nginx / Caddy 把 `/api/v1`、`/dashboard` 与 Agent 上报通道转发给哪吒后端。
 
@@ -100,16 +171,6 @@ cp -r dist/* /opt/nezha/aurora/
 1. `/proto.NezhaService/` → Agent 上报（gRPC h2c），**必须保留**
 2. `/dashboard` 与 `/api/v1` → 面板后台、REST API、WebSocket
 3. 其余请求 → Aurora 静态文件（SPA 回退到 `index.html`）
-
-### 3. Docker 方式（可选）
-
-```bash
-docker build -t nezha-aurora .
-docker run -d --name nezha-aurora --restart unless-stopped \
-  -p 127.0.0.1:8081:80 nezha-aurora
-```
-
-容器只提供静态文件，仍需在外层反向代理中把 `/api/v1` 转发给面板。
 
 ---
 
@@ -220,8 +281,11 @@ src/
 ├── views/         首页总览、节点详情
 └── styles/        设计系统（CSS 变量 + 明暗主题）
 deploy/            Nginx / Caddy 部署示例
+docker/            Docker 镜像内的 Nginx 反代模板与启动脚本
 preview/           零依赖演示服务（内置模拟数据，无需面板即可预览）
 scripts/           国家坐标生成、主题包打包脚本
+.github/           在线构建流水线（自动构建并推送镜像到 GHCR）
+Dockerfile         单容器镜像定义（多阶段构建，内置反代）
 ```
 
 ---

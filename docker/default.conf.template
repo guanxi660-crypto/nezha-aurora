@@ -1,0 +1,71 @@
+# 本文件由 nginx 官方 entrypoint 在容器启动时用 envsubst 渲染：
+#   ${NEZHA_BACKEND}       —— 哪吒面板地址（必填，含协议）
+#   ${NEZHA_GRPC_BACKEND}  —— Agent 上报通道地址（不含协议，未设置时自动从上面推导）
+#
+# envsubst 只会替换容器里已定义的环境变量，因此 $host、$http_upgrade
+# 这类 nginx 内置变量会原样保留。
+
+server {
+    listen 80;
+    server_name _;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # 构建产物文件名自带 hash，可以长期缓存
+    location /assets/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        try_files $uri =404;
+    }
+
+    # SPA 回退
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # 实时状态推送（WebSocket）
+    location /api/v1/ws/ {
+        proxy_pass ${NEZHA_BACKEND};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+        proxy_buffering off;
+    }
+
+    # REST 接口
+    location /api/ {
+        proxy_pass ${NEZHA_BACKEND};
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # 右上角「进入管理面板」入口
+    location /dashboard {
+        proxy_pass ${NEZHA_BACKEND};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Agent 上报通道（gRPC over h2c）。
+    # 只有当面板域名也解析到本容器时才需要；纯静态主题部署用不到这一段。
+    location /proto.NezhaService/ {
+        grpc_pass grpc://${NEZHA_GRPC_BACKEND};
+        grpc_read_timeout 3600s;
+        grpc_send_timeout 3600s;
+    }
+}

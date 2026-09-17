@@ -358,7 +358,6 @@ watch(
             <div class="service-card__head">
               <i class="dot dot--online" />
               <span class="service-card__name">{{ item.monitor_name }}</span>
-              <span class="badge badge--ghost">#{{ item.server_name }}</span>
             </div>
             <div class="service-card__main">
               <span class="service-card__delay num">
