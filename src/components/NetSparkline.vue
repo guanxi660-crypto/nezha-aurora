@@ -10,8 +10,12 @@ const props = withDefaults(
   defineProps<{
     series: Series[];
     height?: number;
+    /** 无数据时的占位文案 */
+    hint?: string;
+    /** 去掉自带底色与边框，便于嵌进卡片内部 */
+    plain?: boolean;
   }>(),
-  { height: 30 },
+  { height: 30, hint: "正在采样网络趋势…", plain: false },
 );
 
 const VIEW_WIDTH = 100;
@@ -61,7 +65,7 @@ const hasAnyData = computed(() =>
 </script>
 
 <template>
-  <div class="spark" :style="{ height: `${height}px` }">
+  <div class="spark" :class="{ 'spark--plain': plain }" :style="{ height: `${height}px` }">
     <svg
       v-if="hasAnyData"
       :viewBox="`0 0 ${VIEW_WIDTH} ${height}`"
@@ -70,11 +74,12 @@ const hasAnyData = computed(() =>
       aria-label="实时网络速率趋势"
     >
       <g v-for="(item, index) in seriesPaths" :key="index">
-        <path v-if="item.hasData" :d="item.area" :fill="item.color" opacity="0.16" />
+        <!-- 颜色走 style 而非 SVG 属性：presentation attribute 不能用 CSS 变量 -->
+        <path v-if="item.hasData" :d="item.area" :style="{ fill: item.color }" opacity="0.16" />
         <path
           v-if="item.hasData"
           :d="item.line"
-          :stroke="item.color"
+          :style="{ stroke: item.color }"
           stroke-width="1.6"
           fill="none"
           stroke-linejoin="round"
@@ -83,7 +88,7 @@ const hasAnyData = computed(() =>
         />
       </g>
     </svg>
-    <span v-else class="spark__hint">正在采样网络趋势…</span>
+    <span v-else class="spark__hint">{{ hint }}</span>
   </div>
 </template>
 
@@ -97,6 +102,12 @@ const hasAnyData = computed(() =>
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.spark--plain {
+  background: transparent;
+  border: none;
+  border-radius: 0;
 }
 
 .spark svg {

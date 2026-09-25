@@ -4,6 +4,7 @@ import { fetchMonitor, fetchServerMetrics } from "@/api/client";
 import type { MetricDataPoint, MetricPeriod, MetricType, NezhaMonitor } from "@/api/types";
 import MetricChart from "@/components/MetricChart.vue";
 import MetricRing from "@/components/MetricRing.vue";
+import NetSparkline from "@/components/NetSparkline.vue";
 import { vFillGrid } from "@/directives/fill-grid";
 import {
   countryFlag,
@@ -87,6 +88,56 @@ const diskPercent = computed(() => percent(server.value?.state?.disk_used, serve
 const swapPercent = computed(() => percent(server.value?.state?.swap_used, server.value?.host?.swap_total));
 
 const cpuCores = computed(() => server.value?.host?.cpu?.length || 0);
+
+/** 按窗口取均值降采样，避免 24 小时逐分钟数据画出上千个点 */
+function downsample(values: number[], target = 120): number[] {
+  if (values.length <= target) return values;
+  const step = values.length / target;
+  const result: number[] = [];
+  for (let i = 0; i < target; i += 1) {
+    const start = Math.floor(i * step);
+    const end = Math.min(values.length, Math.floor((i + 1) * step));
+    let sum = 0;
+    let count = 0;
+    for (let j = start; j < end; j += 1) {
+      sum += Number(values[j]) || 0;
+      count += 1;
+    }
+    result.push(count ? sum / count : 0);
+  }
+  return result;
+}
+
+interface MonitorCard {
+  key: string;
+  name: string;
+  currentDelay: number;
+  avgDelay: number;
+  lossRate: number | null;
+  series: { points: number[]; color: string }[];
+}
+
+/** 服务监控卡片：保留延迟指标，并附一条延迟走势曲线 */
+const monitorCards = computed<MonitorCard[]>(() =>
+  monitors.value.map((item) => {
+    const delays = Array.isArray(item.avg_delay) ? item.avg_delay : [];
+    const valid = delays.filter((value) => typeof value === "number" && value > 0);
+    const currentDelay = delays.length ? Number(delays[delays.length - 1]) || 0 : 0;
+    const loss =
+      Array.isArray(item.packet_loss) && item.packet_loss.length
+        ? Number(item.packet_loss[item.packet_loss.length - 1]) || 0
+        : null;
+
+    return {
+      key: `${item.monitor_id}-${item.server_id}`,
+      name: item.monitor_name || "未命名服务",
+      currentDelay,
+      avgDelay: valid.length ? valid.reduce((a, b) => a + b, 0) / valid.length : 0,
+      lossRate: loss,
+      series: [{ points: downsample(delays.map((v) => Number(v) || 0)), color: "var(--accent)" }],
+    };
+  }),
+);
 
 async function loadMetrics() {
   if (!props.id) return;
@@ -354,33 +405,31 @@ watch(
           <h2 class="section-title">服务监控（近 24 小时）</h2>
         </div>
         <div class="service-grid">
-          <div v-for="item in monitors" :key="item.monitor_id + '-' + item.server_id" class="service-card">
+          <div v-for="card in monitorCards" :key="card.key" class="service-card">
             <div class="service-card__head">
-              <i class="dot dot--online" />
-              <span class="service-card__name">{{ item.monitor_name }}</span>
+              <i class="dot" :class="card.currentDelay > 0 ? 'dot--online' : 'dot--offline'" />
+              <span class="service-card__name">{{ card.name }}</span>
             </div>
+
             <div class="service-card__main">
               <span class="service-card__delay num">
-                {{
-                  item.avg_delay?.length
-                    ? `${item.avg_delay[item.avg_delay.length - 1].toFixed(0)} ms`
-                    : "-"
-                }}
+                {{ card.currentDelay > 0 ? `${card.currentDelay.toFixed(0)} ms` : "-" }}
               </span>
               <span class="service-card__avg num">
-                平均
-                {{
-                  item.avg_delay?.length
-                    ? `${(item.avg_delay.reduce((a, b) => a + b, 0) / item.avg_delay.length).toFixed(0)} ms`
-                    : "-"
-                }}
+                平均 {{ card.avgDelay > 0 ? `${card.avgDelay.toFixed(0)} ms` : "-" }}
               </span>
             </div>
-            <div class="service-card__row" v-if="item.packet_loss?.length">
-              <span>丢包率</span>
-              <span class="service-card__val num">
-                {{ (item.packet_loss[item.packet_loss.length - 1] ?? 0).toFixed(2) }}%
-              </span>
+
+            <NetSparkline
+              class="service-card__trend"
+              :series="card.series"
+              :height="52"
+              plain
+              hint="暂无延迟数据"
+            />
+
+            <div v-if="card.lossRate !== null" class="service-card__loss num">
+              丢包率 {{ card.lossRate.toFixed(2) }}%
             </div>
           </div>
         </div>
@@ -392,6 +441,16 @@ watch(
 <style scoped>
 .rings {
   margin-left: auto;
+}
+
+.service-card__trend {
+  margin-top: 10px;
+}
+
+.service-card__loss {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-faint);
 }
 
 .detail-section {
