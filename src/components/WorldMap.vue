@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import type { PreparedServer } from "@/store/nezha";
 import { countryFlag, formatSpeed, percent } from "@/utils/format";
@@ -66,8 +66,65 @@ const locatedCount = computed(() =>
   clusters.value.reduce((sum, cluster) => sum + cluster.entries.length, 0),
 );
 
-const tooltip = ref<{ x: number; y: number; cluster: Cluster } | null>(null);
+const tooltip = ref<{ cluster: Cluster } | null>(null);
+const tooltipPos = ref({ left: 0, top: 0 });
 const svgEl = ref<SVGSVGElement | null>(null);
+const tooltipEl = ref<HTMLElement | null>(null);
+
+/**
+ * 浮层用 fixed 定位并直接钳制在视口内。
+ * 早前用「跟随光标 + 贴边翻转」的方案，但列表改成完整展开后可能同时高于光标上下的空间，
+ * 翻转也救不了；直接算一个不越界的位置更稳。
+ */
+const GAP = 12;
+let tooltipSize = { w: 0, h: 0 };
+
+function placeTooltip() {
+  if (!tooltip.value) return;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+  let left = pointer.x + GAP;
+  let top = pointer.y + GAP;
+  if (tooltipSize.w) left = Math.min(left, vw - GAP - tooltipSize.w);
+  if (tooltipSize.h) top = Math.min(top, vh - GAP - tooltipSize.h);
+
+  tooltipPos.value = {
+    left: Math.max(GAP, left),
+    top: Math.max(GAP, top),
+  };
+}
+
+/**
+ * 用 ResizeObserver 跟踪浮层尺寸，而不是在 nextTick 里量一次：
+ * 元素可能尚未渲染完成，且节点状态刷新后尺寸还会变化。
+ * 尺寸缓存下来后，applyHover 里就能直接用，无需每帧读 DOM 触发强制布局。
+ */
+let tooltipObserver: ResizeObserver | null = null;
+
+watch(tooltipEl, (el) => {
+  tooltipObserver?.disconnect();
+  tooltipObserver = null;
+  if (!el) {
+    tooltipSize = { w: 0, h: 0 };
+    return;
+  }
+
+  const sync = () => {
+    if (!el.isConnected) return;
+    tooltipSize = { w: el.offsetWidth, h: el.offsetHeight };
+    placeTooltip();
+  };
+
+  sync();
+  tooltipObserver = new ResizeObserver(sync);
+  tooltipObserver.observe(el);
+});
+
+onBeforeUnmount(() => {
+  tooltipObserver?.disconnect();
+  tooltipObserver = null;
+});
 
 /**
  * 命中判定说明：
@@ -139,23 +196,17 @@ function applyHover() {
 
   cancelHide();
 
-  // tooltip 相对 .world-map 容器定位
-  const host = svg.parentElement?.getBoundingClientRect() ?? rect;
-  const x = pointer.x - host.left;
-  const y = pointer.y - host.top;
-
   const current = tooltip.value;
   // 必须按 code 比较：clusters 是 computed，WS 每秒推送都会重建全部对象，
   // 用引用比较会导致每秒判定一次「切换国家」，列表被反复重建。
   if (current?.cluster.code === best.code) {
-    current.x = x;
-    current.y = y;
-    // 同步最新快照，保证 tooltip 内的实时数据跟着刷新
+    // 同步最新快照，保证浮层内的实时数据跟着刷新
     current.cluster = best;
-    return;
+  } else {
+    tooltip.value = { cluster: best };
   }
 
-  tooltip.value = { x, y, cluster: best };
+  placeTooltip();
 }
 
 function openServer(id: number) {
@@ -279,8 +330,9 @@ onMounted(async () => {
 
       <div
         v-if="tooltip"
+        ref="tooltipEl"
         class="world-map__tooltip"
-        :style="{ left: `${tooltip.x}px`, top: `${tooltip.y}px` }"
+        :style="{ left: `${tooltipPos.left}px`, top: `${tooltipPos.top}px` }"
         @mouseenter="cancelHide"
         @mouseleave="scheduleHide"
       >
@@ -431,11 +483,11 @@ onMounted(async () => {
 }
 
 .world-map__tooltip {
-  position: absolute;
-  z-index: 20;
+  /* fixed 定位，坐标由 JS 按视口边缘钳制，避免贴边时被裁掉 */
+  position: fixed;
+  z-index: 60;
   min-width: 210px;
   max-width: 320px;
-  transform: translate(12px, 12px);
   padding: 9px 10px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-strong);
@@ -446,6 +498,9 @@ onMounted(async () => {
   background: color-mix(in srgb, var(--panel-solid) 97%, transparent);
   box-shadow: var(--shadow-pop);
   pointer-events: auto;
+  /* 兜底：节点极多时也不至于超出屏幕；正常数量下不会触发滚动 */
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
 }
 
 .world-map__tooltip-head {
@@ -466,10 +521,8 @@ onMounted(async () => {
   color: var(--text-faint);
 }
 
+/* 国家节点列表完整展开，不做内部滚动，避免还要在浮层里再滚动一次 */
 .world-map__tooltip-list {
-  max-height: 264px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
   margin: 0 -4px;
   padding: 0 4px;
 }
