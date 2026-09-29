@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import type { PreparedServer } from "@/store/nezha";
 import { countryFlag, formatSpeed, percent } from "@/utils/format";
@@ -72,59 +72,39 @@ const svgEl = ref<SVGSVGElement | null>(null);
 const tooltipEl = ref<HTMLElement | null>(null);
 
 /**
- * 浮层用 fixed 定位并直接钳制在视口内。
- * 早前用「跟随光标 + 贴边翻转」的方案，但列表改成完整展开后可能同时高于光标上下的空间，
- * 翻转也救不了；直接算一个不越界的位置更稳。
+ * 浮层用 fixed 定位，默认贴在光标右下方。
+ *
+ * 关键点：贴着光标的那条边放不下时翻到光标另一侧，而不是把浮层硬推到屏幕角落——
+ * 后者会让浮层离光标很远，鼠标和内容对不上。
+ * 尺寸每次现读：内容随 WS 推送变化，缓存值很容易在渲染中途被记成偏小的值，
+ * 导致「放得下」的误判（表现为浮层仍超出屏幕）。
  */
 const GAP = 12;
-let tooltipSize = { w: 0, h: 0 };
 
 function placeTooltip() {
-  if (!tooltip.value) return;
+  const el = tooltipEl.value;
+  if (!tooltip.value || !el) return;
+
+  const w = el.offsetWidth;
+  const h = el.offsetHeight;
   const vw = window.innerWidth;
   const vh = window.innerHeight;
 
   let left = pointer.x + GAP;
   let top = pointer.y + GAP;
-  if (tooltipSize.w) left = Math.min(left, vw - GAP - tooltipSize.w);
-  if (tooltipSize.h) top = Math.min(top, vh - GAP - tooltipSize.h);
+
+  if (left + w > vw - GAP) left = pointer.x - GAP - w;
+  if (top + h > vh - GAP) top = pointer.y - GAP - h;
+
+  // 浮层比视口还大（两侧都放不下）时才退化为边界钳制
+  left = Math.min(left, vw - GAP - w);
+  top = Math.min(top, vh - GAP - h);
 
   tooltipPos.value = {
     left: Math.max(GAP, left),
     top: Math.max(GAP, top),
   };
 }
-
-/**
- * 用 ResizeObserver 跟踪浮层尺寸，而不是在 nextTick 里量一次：
- * 元素可能尚未渲染完成，且节点状态刷新后尺寸还会变化。
- * 尺寸缓存下来后，applyHover 里就能直接用，无需每帧读 DOM 触发强制布局。
- */
-let tooltipObserver: ResizeObserver | null = null;
-
-watch(tooltipEl, (el) => {
-  tooltipObserver?.disconnect();
-  tooltipObserver = null;
-  if (!el) {
-    tooltipSize = { w: 0, h: 0 };
-    return;
-  }
-
-  const sync = () => {
-    if (!el.isConnected) return;
-    tooltipSize = { w: el.offsetWidth, h: el.offsetHeight };
-    placeTooltip();
-  };
-
-  sync();
-  tooltipObserver = new ResizeObserver(sync);
-  tooltipObserver.observe(el);
-});
-
-onBeforeUnmount(() => {
-  tooltipObserver?.disconnect();
-  tooltipObserver = null;
-});
 
 /**
  * 命中判定说明：
@@ -328,41 +308,47 @@ onMounted(async () => {
         </g>
       </svg>
 
-      <div
-        v-if="tooltip"
-        ref="tooltipEl"
-        class="world-map__tooltip"
-        :style="{ left: `${tooltipPos.left}px`, top: `${tooltipPos.top}px` }"
-        @mouseenter="cancelHide"
-        @mouseleave="scheduleHide"
-      >
-        <div class="world-map__tooltip-head">
-          {{ countryFlag(tooltip.cluster.code) }} {{ tooltip.cluster.code }}
-          <span class="world-map__tooltip-stat">
-            在线 {{ tooltip.cluster.online }} / 离线 {{ tooltip.cluster.offline }}
-          </span>
-        </div>
-        <!-- 单个国家的节点可能很多，限高滚动避免 tooltip 撑满整屏 -->
-        <div class="world-map__tooltip-list">
-          <button
-            v-for="entry in tooltip.cluster.entries"
-            :key="entry.server.id"
-            type="button"
-            class="world-map__tooltip-item"
-            @click="openServer(entry.server.id)"
-          >
-            <i class="dot" :class="entry.online ? 'dot--online' : 'dot--offline'" />
-            <span class="world-map__tooltip-name">{{ entry.server.name }}</span>
-            <span class="world-map__tooltip-meta num">
-              CPU {{ (entry.server.state?.cpu || 0).toFixed(0) }}% ·
-              内存 {{ percent(entry.server.state?.mem_used, entry.server.host?.mem_total).toFixed(0) }}%
-              <template v-if="entry.online">
-                · ↓{{ formatSpeed(entry.server.state?.net_in_speed, 1) }}
-              </template>
+      <!--
+        必须 Teleport 到 body：地图容器的 class 带 .panel，而 .panel 上有
+        backdrop-filter，它会让元素成为 fixed 定位的包含块——留在容器里的话，
+        浮层坐标会相对面板而不是视口，位置整体偏移（页面滚动后尤其明显）。
+      -->
+      <Teleport to="body">
+        <div
+          v-if="tooltip"
+          ref="tooltipEl"
+          class="world-map__tooltip"
+          :style="{ left: `${tooltipPos.left}px`, top: `${tooltipPos.top}px` }"
+          @mouseenter="cancelHide"
+          @mouseleave="scheduleHide"
+        >
+          <div class="world-map__tooltip-head">
+            {{ countryFlag(tooltip.cluster.code) }} {{ tooltip.cluster.code }}
+            <span class="world-map__tooltip-stat">
+              在线 {{ tooltip.cluster.online }} / 离线 {{ tooltip.cluster.offline }}
             </span>
-          </button>
+          </div>
+          <div class="world-map__tooltip-list">
+            <button
+              v-for="entry in tooltip.cluster.entries"
+              :key="entry.server.id"
+              type="button"
+              class="world-map__tooltip-item"
+              @click="openServer(entry.server.id)"
+            >
+              <i class="dot" :class="entry.online ? 'dot--online' : 'dot--offline'" />
+              <span class="world-map__tooltip-name">{{ entry.server.name }}</span>
+              <span class="world-map__tooltip-meta num">
+                CPU {{ (entry.server.state?.cpu || 0).toFixed(0) }}% ·
+                内存 {{ percent(entry.server.state?.mem_used, entry.server.host?.mem_total).toFixed(0) }}%
+                <template v-if="entry.online">
+                  · ↓{{ formatSpeed(entry.server.state?.net_in_speed, 1) }}
+                </template>
+              </span>
+            </button>
+          </div>
         </div>
-      </div>
+      </Teleport>
     </template>
   </div>
 </template>
