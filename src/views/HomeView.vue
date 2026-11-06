@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import FilterBar from "@/components/FilterBar.vue";
 import OverviewStats from "@/components/OverviewStats.vue";
 import ServerCard from "@/components/ServerCard.vue";
@@ -22,6 +22,15 @@ function detectView(): ViewMode {
 }
 
 const view = ref<ViewMode>(detectView());
+
+// ForceShowMap 由面板自定义代码注入，写入 state.runtime 晚于本组件 setup，
+// 因此这里持续跟随运行时配置，而不是只在 setup 时读一次。
+watch(
+  () => state.runtime.forceShowMap,
+  (forced) => {
+    if (forced) view.value = "map";
+  },
+);
 
 function setView(next: ViewMode) {
   view.value = next;

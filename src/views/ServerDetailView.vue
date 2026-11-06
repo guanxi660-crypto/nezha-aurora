@@ -139,27 +139,37 @@ const monitorCards = computed<MonitorCard[]>(() =>
   }),
 );
 
+/** 竞态守卫：指标/周期/节点快速切换时，只有最后一次请求允许落地 */
+let metricsRequestId = 0;
+let monitorsRequestId = 0;
+
 async function loadMetrics() {
   if (!props.id) return;
+  const requestId = ++metricsRequestId;
   chartLoading.value = true;
   chartError.value = "";
   try {
     const data = await fetchServerMetrics(props.id, metric.value, period.value);
+    if (requestId !== metricsRequestId) return;
     points.value = data?.data_points || [];
   } catch (error) {
+    if (requestId !== metricsRequestId) return;
     points.value = [];
     chartError.value = error instanceof Error ? error.message : String(error);
   } finally {
-    chartLoading.value = false;
+    if (requestId === metricsRequestId) chartLoading.value = false;
   }
 }
 
 async function loadMonitors() {
   if (!props.id) return;
+  const requestId = ++monitorsRequestId;
   try {
     const data = await fetchMonitor(props.id, "1d");
+    if (requestId !== monitorsRequestId) return;
     monitors.value = Array.isArray(data) ? data : [];
   } catch {
+    if (requestId !== monitorsRequestId) return;
     monitors.value = [];
   }
 }

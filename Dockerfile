@@ -21,8 +21,12 @@ COPY --from=build /app/dist /usr/share/nginx/html
 
 # 反代模板：容器启动时由 nginx 官方 entrypoint 渲染为 /etc/nginx/conf.d/default.conf
 COPY docker/default.conf.template /etc/nginx/templates/default.conf.template
-COPY docker/10-derive-grpc-backend.sh /docker-entrypoint.d/10-derive-grpc-backend.sh
-RUN chmod +x /docker-entrypoint.d/10-derive-grpc-backend.sh
+COPY docker/aurora-entrypoint.sh /usr/local/bin/aurora-entrypoint.sh
+RUN chmod +x /usr/local/bin/aurora-entrypoint.sh
+
+# 官方 entrypoint 对 entrypoint.d 下的脚本是子进程执行，export 不回传，
+# GRPC 后端推导必须在 exec 官方入口之前完成（见 docker/aurora-entrypoint.sh）
+ENTRYPOINT ["/usr/local/bin/aurora-entrypoint.sh"]
 
 # 哪吒面板地址。容器内访问宿主机上的面板用 host.docker.internal，
 # 访问同网络内的容器直接用服务名，例如 http://nezha:8008
