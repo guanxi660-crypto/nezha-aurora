@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { fetchMonitor, fetchServerMetrics } from "@/api/client";
 import type { MetricDataPoint, MetricPeriod, MetricType, NezhaMonitor } from "@/api/types";
 import MetricChart from "@/components/MetricChart.vue";
@@ -59,6 +59,17 @@ const points = ref<MetricDataPoint[]>([]);
 const chartLoading = ref(false);
 const chartError = ref("");
 const monitors = ref<NezhaMonitor[]>([]);
+
+/** 手机内容宽放不下 4×68px 的用量环，窄屏时缩小环径保持同一排 */
+const compactRingsQuery = window.matchMedia("(max-width: 640px)");
+const compactRings = ref(compactRingsQuery.matches);
+const onCompactRingsChange = (event: MediaQueryListEvent) => {
+  compactRings.value = event.matches;
+};
+compactRingsQuery.addEventListener("change", onCompactRingsChange);
+onBeforeUnmount(() => {
+  compactRingsQuery.removeEventListener("change", onCompactRingsChange);
+});
 
 const server = computed(() => serverById.value.get(props.id));
 const flagCode = computed(() => {
@@ -227,10 +238,10 @@ watch(
         </div>
 
         <div class="rings">
-          <MetricRing label="CPU" :value="server.state?.cpu || 0" :size="68" />
-          <MetricRing label="内存" :value="memPercent" :size="68" />
-          <MetricRing label="磁盘" :value="diskPercent" :size="68" />
-          <MetricRing label="交换" :value="swapPercent" :size="68" />
+          <MetricRing label="CPU" :value="server.state?.cpu || 0" :size="compactRings ? 54 : 68" />
+          <MetricRing label="内存" :value="memPercent" :size="compactRings ? 54 : 68" />
+          <MetricRing label="磁盘" :value="diskPercent" :size="compactRings ? 54 : 68" />
+          <MetricRing label="交换" :value="swapPercent" :size="compactRings ? 54 : 68" />
         </div>
       </section>
 
@@ -451,6 +462,14 @@ watch(
 <style scoped>
 .rings {
   margin-left: auto;
+}
+
+/* 手机上用量环独占一行：缩小环径与间距保证四个一排，并取消贴右对齐 */
+@media (max-width: 640px) {
+  .rings {
+    gap: 12px;
+    margin-left: 0;
+  }
 }
 
 .service-card__trend {
