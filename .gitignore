@@ -7,3 +7,5 @@ dist.zip
 
 # 浏览器自动化工具产生的临时目录
 .playwright-cli
+
+__pycache__/
