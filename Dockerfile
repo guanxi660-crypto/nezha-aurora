@@ -28,6 +28,10 @@ RUN chmod +x /usr/local/bin/aurora-entrypoint.sh
 # GRPC 后端推导必须在 exec 官方入口之前完成（见 docker/aurora-entrypoint.sh）
 ENTRYPOINT ["/usr/local/bin/aurora-entrypoint.sh"]
 
+# 声明 ENTRYPOINT 会清空基础镜像的 CMD；不补上的话 docker run 不带命令
+# 时 nginx 根本不会启动（entrypoint 收到空参数直接 exit 0）
+CMD ["nginx", "-g", "daemon off;"]
+
 # 哪吒面板地址。容器内访问宿主机上的面板用 host.docker.internal，
 # 访问同网络内的容器直接用服务名，例如 http://nezha:8008
 ENV NEZHA_BACKEND=http://host.docker.internal:8008
