@@ -84,6 +84,28 @@ npm run build:theme    # 额外生成 dist.zip（哪吒主题发布包）
 镜像由 GitHub Actions 在线构建后推送到 GHCR，**直接拉取即可**，服务器上不需要 Node 环境。
 容器内已内置 Nginx 反代（`/api/v1`、WebSocket、`/dashboard`），所以**单容器就能跑通**，不必再单独写反代配置。
 
+### 一键安装（Linux）
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/guanxi660-crypto/nezha-aurora/main/install.sh)
+```
+
+脚本会自动安装 Docker（若缺失）、拉取镜像、启动容器，并交互询问面板地址与端口；装完自动做前端与面板反代的健康检查。也支持非交互与日常运维：
+
+```bash
+# 非交互安装：指定面板地址与端口
+bash install.sh -y --backend http://127.0.0.1:8008 --port 8080
+
+bash install.sh update      # 拉取最新镜像并重建容器，保留现有配置
+bash install.sh status      # 查看运行状态与后端连通性
+bash install.sh uninstall   # 移除容器（加 --purge 连镜像一起删）
+```
+
+> - 官方镜像仅 **linux/amd64**；ARM 服务器加 `--build` 从源码本地构建。
+> - 面板地址写 `127.0.0.1` / `localhost` 时会自动改写为 `host.docker.internal`（容器内访问宿主机）。
+> - 中国大陆网络：装 Docker 慢加 `--mirror Aliyun`；ghcr.io 拉不动用 `--image <镜像地址>` 或 `--build`。
+> - GHCR 包若为私有，按脚本提示改 Public 或先 `docker login ghcr.io`。
+
 ### 1. 拉取并启动
 
 ```bash
@@ -287,6 +309,7 @@ preview/           零依赖演示服务（内置模拟数据，无需面板即�
 scripts/           国家坐标生成、主题包打包脚本
 .github/           在线构建流水线（自动构建并推送镜像到 GHCR）
 Dockerfile         单容器镜像定义（多阶段构建，内置反代）
+install.sh         Linux 一键安装/更新/卸载脚本
 ```
 
 ---
