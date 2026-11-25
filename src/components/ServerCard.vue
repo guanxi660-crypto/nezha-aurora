@@ -151,6 +151,21 @@ const ipLabel = computed(() => {
   return "";
 });
 
+/** 价格徽章：官方语义 0=免费、-1=按量计费，其余按原文展示 */
+const priceLabel = computed(() => {
+  const amount = note.value?.billingDataMod?.amount?.trim();
+  if (!amount) return "";
+  if (amount === "0") return "免费";
+  if (amount === "-1") return "按量计费";
+  return amount;
+});
+const priceLevel = computed(() => {
+  const amount = note.value?.billingDataMod?.amount?.trim();
+  if (amount === "0") return "free";
+  if (amount === "-1") return "usage";
+  return "price";
+});
+
 const loadText = computed(() => {
   const s = props.server.state;
   if (!props.online || !s) return "-";
@@ -250,6 +265,7 @@ function open() {
           <span class="server-card__name-text">{{ server.name }}</span>
           <span v-if="expireText" class="card-chip" :class="`card-chip--${expireLevel}`">{{ expireText }}</span>
           <span v-if="ipLabel" class="card-chip card-chip--ip">{{ ipLabel }}</span>
+          <span v-if="priceLabel" class="card-chip" :class="`card-chip--${priceLevel}`">{{ priceLabel }}</span>
         </div>
         <div class="server-card__meta">
           <div class="server-card__meta-row">
@@ -421,6 +437,25 @@ function open() {
   color: #fb923c;
   background: color-mix(in srgb, #fb923c 14%, transparent);
   border-color: color-mix(in srgb, #fb923c 32%, transparent);
+}
+
+.card-chip--free {
+  /* 金色，固定值不受主题变量影响 */
+  color: #fbbf24;
+  background: color-mix(in srgb, #fbbf24 14%, transparent);
+  border-color: color-mix(in srgb, #fbbf24 32%, transparent);
+}
+
+.card-chip--usage {
+  color: #f472b6;
+  background: color-mix(in srgb, #f472b6 14%, transparent);
+  border-color: color-mix(in srgb, #f472b6 30%, transparent);
+}
+
+.card-chip--price {
+  color: var(--text-dim);
+  background: color-mix(in srgb, var(--text-dim) 12%, transparent);
+  border-color: color-mix(in srgb, var(--text-dim) 26%, transparent);
 }
 
 .server-card__uptime {
