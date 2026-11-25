@@ -122,6 +122,13 @@ function downsample(values: number[], target = 120): number[] {
   return result;
 }
 
+/** 与 downsample 同步压缩时间戳：取每段起点，保证 times[i] 对应 points[i] */
+function downsampleTimes(times: number[], sourceLength: number, target = 120): number[] {
+  if (sourceLength <= target) return times;
+  const step = sourceLength / target;
+  return Array.from({ length: target }, (_, i) => times[Math.floor(i * step)]);
+}
+
 interface MonitorCard {
   key: string;
   name: string;
@@ -129,6 +136,7 @@ interface MonitorCard {
   avgDelay: number;
   lossRate: number | null;
   series: { points: number[]; color: string }[];
+  times: number[];
 }
 
 /** 服务监控卡片：保留延迟指标，并附一条延迟走势曲线 */
@@ -149,6 +157,10 @@ const monitorCards = computed<MonitorCard[]>(() =>
       avgDelay: valid.length ? valid.reduce((a, b) => a + b, 0) / valid.length : 0,
       lossRate: loss,
       series: [{ points: downsample(delays.map((v) => Number(v) || 0)), color: "var(--accent)" }],
+      times: downsampleTimes(
+        Array.isArray(item.created_at) ? item.created_at : [],
+        delays.length,
+      ),
     };
   }),
 );
@@ -447,7 +459,9 @@ watch(
             <NetSparkline
               class="service-card__trend"
               :series="card.series"
+              :times="card.times"
               :height="52"
+              value-label=" ms"
               plain
               hint="暂无延迟数据"
             />
@@ -476,7 +490,8 @@ watch(
 }
 
 .service-card__trend {
-  margin-top: 10px;
+  /* 顶部预留给悬浮 tooltip 的时间/数值气泡 */
+  margin-top: 26px;
 }
 
 .service-card__loss {
