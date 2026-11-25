@@ -46,14 +46,76 @@ const note = computed(() => parsePublicNote(props.server.public_note));
 
 const DAY_MS = 86400000;
 
-/** 租期剩余天数：跟随 WS 推送刷新；负值表示已过期 */
+/** 面板字段可能是字符串也可能是数字/布尔，统一转字符串判断 */
+function isAutoRenewal(value: unknown): boolean {
+  if (value === null || value === undefined) return false;
+  const v = String(value).trim().toLowerCase();
+  return (
+    v === "1" || v === "true" || v === "yes" || v === "y" || v === "on" ||
+    v === "是" || v === "开" || v.includes("自动") || v.includes("续")
+  );
+}
+
+type CycleStep = { unit: "month" | "year" | "day"; n: number } | null;
+
+/** 从 cycle（或 amount，如 ￥299/年）解析续费周期 */
+function parseCycle(cycle: unknown): CycleStep {
+  if (cycle === null || cycle === undefined) return null;
+  const s = String(cycle).trim().toLowerCase();
+  let m = s.match(/(\d+)\s*(?:个)?\s*(?:月|month)s?/);
+  if (m) return { unit: "month", n: Math.max(1, parseInt(m[1], 10)) };
+  m = s.match(/(\d+)\s*(?:个)?\s*(?:年|year)s?/);
+  if (m) return { unit: "year", n: Math.max(1, parseInt(m[1], 10)) };
+  m = s.match(/(\d+)\s*(?:天|日|day)s?/);
+  if (m) return { unit: "day", n: Math.max(1, parseInt(m[1], 10)) };
+  if (s.includes("月") || s.includes("month")) return { unit: "month", n: 1 };
+  if (s.includes("年") || s.includes("year")) return { unit: "year", n: 1 };
+  return null;
+}
+
+/** 自动续费节点：把停在旧周期的 endDate 往后滚，直到覆盖今天 */
+function rollRenewalDate(endDate: string, step: CycleStep, now: number): number | null {
+  if (!step) return null;
+  const d = new Date(endDate);
+  if (!Number.isFinite(d.getTime())) return null;
+  const day = d.getDate();
+  const daysIn = (y: number, m: number) => new Date(y, m + 1, 0).getDate();
+  for (let i = 0; i < 240 && d.getTime() < now; i++) {
+    if (step.unit === "month") {
+      const next = new Date(d.getFullYear(), d.getMonth() + step.n, 1);
+      next.setDate(Math.min(day, daysIn(next.getFullYear(), next.getMonth())));
+      d.setTime(next.getTime());
+    } else if (step.unit === "year") {
+      const next = new Date(d.getFullYear() + step.n, d.getMonth(), 1);
+      next.setDate(Math.min(day, daysIn(next.getFullYear(), next.getMonth())));
+      d.setTime(next.getTime());
+    } else {
+      d.setDate(d.getDate() + step.n);
+    }
+  }
+  return d.getTime() >= now ? d.getTime() : null;
+}
+
+/** 租期剩余天数：跟随 WS 推送刷新；自动续费时按周期滚动 endDate */
 const expireDays = computed(() => {
   void props.server.last_active;
-  const end = note.value?.billingDataMod?.endDate;
-  if (!end) return null;
-  const ms = Date.parse(end);
-  if (!Number.isFinite(ms)) return null;
-  return Math.ceil((ms - Date.now()) / DAY_MS);
+  const billing = note.value?.billingDataMod;
+  if (!billing?.endDate) return null;
+  const raw = Date.parse(billing.endDate);
+  if (!Number.isFinite(raw)) return null;
+  const now = Date.now();
+  // 未到期或非自动续费：按 endDate 原样计算（真过期就显示已过期）
+  if (raw >= now || !isAutoRenewal(billing.autoRenewal)) {
+    return Math.ceil((raw - now) / DAY_MS);
+  }
+  // 自动续费但 endDate 停在旧周期：滚动到当前周期再算
+  const rolled = rollRenewalDate(
+    billing.endDate,
+    parseCycle(billing.cycle) ?? parseCycle(billing.amount),
+    now,
+  );
+  // 周期识别不了就不显示，避免误导性的「已过期」
+  return rolled === null ? null : Math.ceil((rolled - now) / DAY_MS);
 });
 const expireText = computed(() => {
   const d = expireDays.value;
