@@ -44,6 +44,48 @@ const osName = computed(() => getOsName(props.server.host?.platform));
 const platformVersion = computed(() => props.server.host?.platform_version || "");
 const note = computed(() => parsePublicNote(props.server.public_note));
 
+const DAY_MS = 86400000;
+
+/** 租期剩余天数：跟随 WS 推送刷新；负值表示已过期 */
+const expireDays = computed(() => {
+  void props.server.last_active;
+  const end = note.value?.billingDataMod?.endDate;
+  if (!end) return null;
+  const ms = Date.parse(end);
+  if (!Number.isFinite(ms)) return null;
+  return Math.ceil((ms - Date.now()) / DAY_MS);
+});
+const expireText = computed(() => {
+  const d = expireDays.value;
+  if (d === null) return "";
+  if (d > 0) return `剩余 ${d}天`;
+  return d === 0 ? "今日到期" : `已过期 ${-d}天`;
+});
+const expireLevel = computed(() => {
+  const d = expireDays.value;
+  if (d === null) return "";
+  if (d <= 0) return "expired";
+  if (d <= 7) return "urgent";
+  if (d <= 30) return "warn";
+  return "ok";
+});
+
+/** IP 徽章：0 / 空 / 无 / false 视为未提供 */
+const ipLabel = computed(() => {
+  const plan = note.value?.planDataMod;
+  if (!plan) return "";
+  const has = (value?: string) => {
+    const v = (value ?? "").trim().toLowerCase();
+    return v !== "" && v !== "0" && v !== "无" && v !== "false" && v !== "no" && v !== "否";
+  };
+  const v4 = has(plan.IPv4);
+  const v6 = has(plan.IPv6);
+  if (v4 && v6) return "双栈IP";
+  if (v4) return "IPv4";
+  if (v6) return "IPv6";
+  return "";
+});
+
 const loadText = computed(() => {
   const s = props.server.state;
   if (!props.online || !s) return "-";
@@ -141,6 +183,8 @@ function open() {
           <span v-if="flagCode" class="server-card__flag fi" :class="`fi-${flagCode}`" :title="flag" />
           <span v-else-if="flag" class="server-card__flag">{{ flag }}</span>
           <span class="server-card__name-text">{{ server.name }}</span>
+          <span v-if="expireText" class="card-chip" :class="`card-chip--${expireLevel}`">{{ expireText }}</span>
+          <span v-if="ipLabel" class="card-chip card-chip--ip">{{ ipLabel }}</span>
         </div>
         <div class="server-card__meta">
           <div class="server-card__meta-row">
@@ -261,9 +305,51 @@ function open() {
 }
 
 .server-card__name-text {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 名称右侧自定义字段徽章：紧凑、语义色，名称过长时优先省略名称 */
+.card-chip {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  height: 19px;
+  padding: 0 7px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.card-chip--ok {
+  color: var(--text-dim);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 26%, transparent);
+}
+
+.card-chip--warn {
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+  border-color: color-mix(in srgb, var(--warn) 32%, transparent);
+}
+
+.card-chip--urgent,
+.card-chip--expired {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  border-color: color-mix(in srgb, var(--danger) 32%, transparent);
+}
+
+.card-chip--ip {
+  color: var(--accent-2);
+  background: color-mix(in srgb, var(--accent-2) 14%, transparent);
+  border-color: color-mix(in srgb, var(--accent-2) 30%, transparent);
 }
 
 .server-card__uptime {
