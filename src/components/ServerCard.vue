@@ -417,9 +417,10 @@ function open() {
 }
 
 .card-chip--ip {
-  color: var(--accent-2);
-  background: color-mix(in srgb, var(--accent-2) 14%, transparent);
-  border-color: color-mix(in srgb, var(--accent-2) 30%, transparent);
+  /* 固定橙色，不受面板自定义强调色（--accent/--accent-2）覆盖 */
+  color: #fb923c;
+  background: color-mix(in srgb, #fb923c 14%, transparent);
+  border-color: color-mix(in srgb, #fb923c 32%, transparent);
 }
 
 .server-card__uptime {
