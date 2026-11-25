@@ -130,9 +130,21 @@ function scheduleReconnect() {
   }, delay);
 }
 
+/** 面板的 public_note 是静态配置，但 WS 推送会裁剪字段；缓存最近一次非空值避免徽章闪没 */
+const noteCache = new Map<number, string>();
+
 function applyPayload(payload: { now: number; online?: number; servers?: NezhaServer[] }) {
   if (typeof payload.now === "number") state.now = payload.now;
-  if (Array.isArray(payload.servers)) state.servers = payload.servers;
+  if (Array.isArray(payload.servers)) {
+    state.servers = payload.servers.map((server) => {
+      if (server.public_note) {
+        noteCache.set(server.id, server.public_note);
+        return server;
+      }
+      const cached = noteCache.get(server.id);
+      return cached === undefined ? server : { ...server, public_note: cached };
+    });
+  }
   if (typeof payload.online === "number") state.onlineUsers = payload.online;
   state.receivedOnce = true;
 }
