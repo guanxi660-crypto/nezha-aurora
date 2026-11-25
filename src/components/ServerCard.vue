@@ -312,6 +312,11 @@ function open() {
 }
 
 /* 名称右侧自定义字段徽章：紧凑、语义色，名称过长时优先省略名称 */
+/* 名称与首个徽章之间留两个空格的间隔，徽章之间仍用原有的 flex gap */
+.server-card__name-text + .card-chip {
+  margin-inline-start: 1em;
+}
+
 .card-chip {
   display: inline-flex;
   align-items: center;
