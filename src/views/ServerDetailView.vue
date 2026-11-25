@@ -14,7 +14,6 @@ import {
   formatUptime,
   getOsName,
   isServerOnline,
-  parsePublicNote,
   percent,
 } from "@/utils/format";
 import { serverById, state } from "@/store/nezha";
@@ -95,21 +94,6 @@ const formatter = computed(() => {
   }
 });
 
-const note = computed(() => (server.value ? parsePublicNote(server.value.public_note) : null));
-
-/** 价格语义：官方 0=免费、-1=按量计费 */
-const priceText = computed(() => {
-  const amount = note.value?.billingDataMod?.amount?.trim();
-  if (amount === "0") return "免费";
-  if (amount === "-1") return "按量计费";
-  return amount || "";
-});
-const priceValueClass = computed(() => {
-  const amount = note.value?.billingDataMod?.amount?.trim();
-  if (amount === "0") return "info-value--gold";
-  if (amount === "-1") return "info-value--pink";
-  return "";
-});
 
 const memPercent = computed(() => percent(server.value?.state?.mem_used, server.value?.host?.mem_total));
 const diskPercent = computed(() => percent(server.value?.state?.disk_used, server.value?.host?.disk_total));
@@ -366,49 +350,6 @@ watch(
           </div>
         </div>
 
-        <div
-          v-if="note?.planDataMod || note?.billingDataMod"
-          v-fill-grid
-          class="info-grid"
-          style="margin-top: 12px"
-        >
-          <template v-if="note?.planDataMod">
-            <div class="info-cell" v-if="note.planDataMod.bandwidth">
-              <span class="info-cell__label">带宽</span>
-              <span class="info-cell__value">{{ note.planDataMod.bandwidth }}</span>
-            </div>
-            <div class="info-cell" v-if="note.planDataMod.trafficVol">
-              <span class="info-cell__label">流量额度</span>
-              <span class="info-cell__value">{{ note.planDataMod.trafficVol }}</span>
-            </div>
-            <div class="info-cell" v-if="note.planDataMod.IPv4">
-              <span class="info-cell__label">IPv4</span>
-              <span class="info-cell__value">{{ note.planDataMod.IPv4 }}</span>
-            </div>
-            <div class="info-cell" v-if="note.planDataMod.IPv6">
-              <span class="info-cell__label">IPv6</span>
-              <span class="info-cell__value">{{ note.planDataMod.IPv6 }}</span>
-            </div>
-            <div class="info-cell" v-if="note.planDataMod.networkRoute">
-              <span class="info-cell__label">线路</span>
-              <span class="info-cell__value">{{ note.planDataMod.networkRoute }}</span>
-            </div>
-          </template>
-          <template v-if="note?.billingDataMod">
-            <div class="info-cell" v-if="note.billingDataMod.amount">
-              <span class="info-cell__label">价格</span>
-              <span class="info-cell__value" :class="priceValueClass">{{ priceText }}</span>
-            </div>
-            <div class="info-cell" v-if="note.billingDataMod.endDate">
-              <span class="info-cell__label">到期时间</span>
-              <span class="info-cell__value">{{ note.billingDataMod.endDate }}</span>
-            </div>
-            <div class="info-cell" v-if="note.billingDataMod.cycle">
-              <span class="info-cell__label">计费周期</span>
-              <span class="info-cell__value">{{ note.billingDataMod.cycle }}</span>
-            </div>
-          </template>
-        </div>
       </section>
 
       <section class="panel detail-section">
@@ -491,13 +432,6 @@ watch(
 </template>
 
 <style scoped>
-.info-value--gold {
-  color: #fbbf24;
-}
-
-.info-value--pink {
-  color: #f472b6;
-}
 
 .rings {
   margin-left: auto;
