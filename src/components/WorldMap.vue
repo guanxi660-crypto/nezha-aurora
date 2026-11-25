@@ -295,6 +295,8 @@ onMounted(async () => {
               :r="cluster.entries.length > 1 ? 5.5 : 4.5"
               tabindex="0"
               @click="cluster.entries.length === 1 && openServer(cluster.entries[0].server.id)"
+              @keydown.enter="cluster.entries.length === 1 && openServer(cluster.entries[0].server.id)"
+              @keydown.space.prevent="cluster.entries.length === 1 && openServer(cluster.entries[0].server.id)"
             />
             <text
               v-if="cluster.entries.length > 1"
@@ -438,11 +440,18 @@ onMounted(async () => {
 
 .world-map__pulse.is-online {
   fill: var(--ok);
-  animation: map-pulse 2.2s ease-out infinite;
+  /* 持续脉冲动画默认关闭，在 no-preference 媒体查询中启用 */
 }
 
 .world-map__pulse.is-offline {
   fill: transparent;
+}
+
+/* 键盘焦点：SVG 元素的 outline 兼容性差，用 stroke 高亮兜底 */
+.world-map__dot:focus-visible {
+  stroke: var(--accent);
+  stroke-width: 3;
+  outline: none;
 }
 
 .world-map__count {
@@ -465,6 +474,12 @@ onMounted(async () => {
   100% {
     transform: scale(1.8);
     opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .world-map__pulse.is-online {
+    animation: map-pulse 2.2s ease-out infinite;
   }
 }
 

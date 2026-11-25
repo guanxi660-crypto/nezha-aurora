@@ -12,7 +12,7 @@ function setup(file, bindings, expose) {
   const js = ts.transpileModule(script.replace(/^import[\s\S]*?from\s+["'][^"']+["'];/gm, ''),
     { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None } }).outputText;
   // ServerDetailView 的 immediate watch 會觸發未 stub 的依賴,僅 HomeView 測試注入真 watch
-  const context = vm.createContext({ ref, computed, watch: () => {}, localStorage: { getItem: () => null }, ...bindings });
+  const context = vm.createContext({ ref, computed, watch: () => {}, onBeforeUnmount: () => {}, localStorage: { getItem: () => null }, ...bindings });
   vm.runInContext(`${js}\nglobalThis.exposed = { ${expose} };`, context);
   return context.exposed;
 }

@@ -959,12 +959,18 @@ select {
   border-radius: 50%;
   border: 2.5px solid var(--border-strong);
   border-top-color: var(--accent);
-  animation: spin 0.85s linear infinite;
 }
 
 @keyframes spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+/* 默认静态，仅在用户未要求减少动效时启用旋转 */
+@media (prefers-reduced-motion: no-preference) {
+  .spinner {
+    animation: spin 0.85s linear infinite;
   }
 }
 
@@ -975,4 +981,13 @@ select {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+/* 只关闭空间位移，保留颜色等非动效过渡 */
+@media (prefers-reduced-motion: reduce) {
+  .icon-btn:hover,
+  .overview-card:hover,
+  .server-card:hover {
+    transform: none;
+  }
 }

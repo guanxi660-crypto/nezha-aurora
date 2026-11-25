@@ -3,17 +3,23 @@ import { ref, watch } from "vue";
 export type ThemeMode = "light" | "dark";
 
 const STORAGE_KEY = "aurora-theme";
+const systemDark = window.matchMedia("(prefers-color-scheme: dark)");
+const systemTheme = (): ThemeMode => (systemDark.matches ? "dark" : "light");
 
-function detectInitial(): ThemeMode {
+function readStored(): ThemeMode | null {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === "light" || stored === "dark") return stored;
+    return stored === "light" || stored === "dark" ? stored : null;
   } catch {
-    /* ignore */
+    return null;
   }
-  const current = document.documentElement.dataset.theme;
-  if (current === "light" || current === "dark") return current;
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+/** null = 跟随系统；有值 = 用户覆盖。UI 仍是明暗二选一。 */
+let override: ThemeMode | null = readStored();
+
+function detectInitial(): ThemeMode {
+  return override ?? systemTheme();
 }
 
 export const theme = ref<ThemeMode>(detectInitial());
@@ -27,13 +33,38 @@ function apply(mode: ThemeMode) {
 
 apply(theme.value);
 
+/** 跨标签页同步时只更新视图，不再回写 localStorage */
+let syncing = false;
+
 watch(theme, (mode) => {
   apply(mode);
+  if (syncing) return;
+  // 目标值与系统偏好一致时删除存储值，回到「跟随系统」，不把偏好钉死。
+  // 只在此刻检查，系统偏好日后变化到与已有覆盖一致时不撤销覆盖。
+  const next: ThemeMode | null = mode === systemTheme() ? null : mode;
+  override = next;
   try {
-    localStorage.setItem(STORAGE_KEY, mode);
+    if (next === null) localStorage.removeItem(STORAGE_KEY);
+    else localStorage.setItem(STORAGE_KEY, next);
   } catch {
     /* ignore */
   }
+}, { flush: "sync" });
+
+// 读 matchMedia 必须监听 change；跟随系统时同步刷新视图。
+systemDark.addEventListener("change", () => {
+  if (override === null) theme.value = systemTheme();
+});
+
+// 另一个标签页切换/清除主题时保持同步。
+window.addEventListener("storage", (event) => {
+  if (event.key !== STORAGE_KEY) return;
+  const next: ThemeMode | null =
+    event.newValue === "light" || event.newValue === "dark" ? event.newValue : null;
+  override = next;
+  syncing = true;
+  theme.value = next ?? systemTheme();
+  syncing = false;
 });
 
 export function toggleTheme() {

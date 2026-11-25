@@ -47,7 +47,12 @@ function buildOption(): echarts.EChartsCoreOption {
   const data = (props.points || []).map((point) => [point.ts, point.value]);
 
   return {
-    animationDuration: 420,
+    animationDuration:
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? 0
+        : 420,
     grid: {
       left: 8,
       right: 12,

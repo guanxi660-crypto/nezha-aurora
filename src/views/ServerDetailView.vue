@@ -61,14 +61,17 @@ const chartError = ref("");
 const monitors = ref<NezhaMonitor[]>([]);
 
 /** 手机内容宽放不下 4×68px 的用量环，窄屏时缩小环径保持同一排 */
-const compactRingsQuery = window.matchMedia("(max-width: 640px)");
-const compactRings = ref(compactRingsQuery.matches);
+const compactRingsQuery =
+  typeof window !== "undefined" && typeof window.matchMedia === "function"
+    ? window.matchMedia("(max-width: 640px)")
+    : null;
+const compactRings = ref(compactRingsQuery?.matches ?? false);
 const onCompactRingsChange = (event: MediaQueryListEvent) => {
   compactRings.value = event.matches;
 };
-compactRingsQuery.addEventListener("change", onCompactRingsChange);
+compactRingsQuery?.addEventListener("change", onCompactRingsChange);
 onBeforeUnmount(() => {
-  compactRingsQuery.removeEventListener("change", onCompactRingsChange);
+  compactRingsQuery?.removeEventListener("change", onCompactRingsChange);
 });
 
 const server = computed(() => serverById.value.get(props.id));

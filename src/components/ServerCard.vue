@@ -132,6 +132,7 @@ function open() {
     tabindex="0"
     @click="open"
     @keydown.enter="open"
+    @keydown.space.prevent="open"
   >
     <header class="server-card__head">
       <div class="server-card__title">
@@ -252,6 +253,11 @@ function open() {
 
 .server-card__meta-fixed {
   flex-shrink: 0;
+}
+
+.server-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .server-card__name-text {
