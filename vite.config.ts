@@ -25,6 +25,8 @@ export default defineConfig({
         target: wsTarget,
         ws: true,
         changeOrigin: true,
+        // 生产反向代理会改写 Origin，dev 也对齐，避免面板按来源拒绝升级（AR）
+        headers: { Origin: apiTarget },
         secure: process.env.VITE_API_INSECURE !== "1",
       },
       "/api/v1": {
@@ -45,6 +47,16 @@ export default defineConfig({
         entryFileNames: "assets/[name].[hash].js",
         chunkFileNames: "assets/[name].[hash].js",
         assetFileNames: "assets/[name].[hash].[ext]",
+        // echarts/zrender 拆成独立 chunk，避免详情页 521KB 全挤在业务 chunk（P24）
+        manualChunks(id) {
+          const normalized = id.replace(/\\/g, "/");
+          if (
+            normalized.includes("/node_modules/echarts/") ||
+            normalized.includes("/node_modules/zrender/")
+          ) {
+            return "vendor-echarts";
+          }
+        },
       },
     },
   },

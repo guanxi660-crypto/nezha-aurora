@@ -7,7 +7,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import("./views/HomeView.vue"),
   },
   {
-    path: "/server/:id",
+    path: "/server/:id(\\d+)",
     name: "server-detail",
     component: () => import("./views/ServerDetailView.vue"),
     props: (route) => ({ id: Number(route.params.id) }),
@@ -25,6 +25,11 @@ if ("scrollRestoration" in window.history) {
 }
 
 const STORAGE_KEY = "aurora-scroll-positions";
+const MAX_SAVED_POSITIONS = 100;
+/** 合法锚点：字母开头的字母/数字/下划线/连字符，避免 querySelector 抛错（BE） */
+const VALID_HASH = /^[a-zA-Z][\w-]*$/;
+/** 滚动恢复代号：每次导航 +1，旧循环发现过期即自行停止（AZ） */
+let restoreSeq = 0;
 
 /**
  * 自行记录每个路由离开时的滚动位置。
@@ -33,6 +38,15 @@ const STORAGE_KEY = "aurora-scroll-positions";
  * 上一个页面（当前页面）的位置，导致返回时位置明显不对。
  */
 const scrollPositions = new Map<string, number>();
+
+/** Map 按插入顺序迭代，超出上限先删最早写入的键（BB） */
+function trimPositions() {
+  while (scrollPositions.size > MAX_SAVED_POSITIONS) {
+    const oldest = scrollPositions.keys().next().value;
+    if (oldest === undefined) break;
+    scrollPositions.delete(oldest);
+  }
+}
 
 function loadPositions() {
   try {
@@ -47,9 +61,10 @@ function loadPositions() {
   } catch {
     /* 忽略存储异常 */
   }
+  trimPositions();
 }
 
-function persistPositions() {
+function writePositions() {
   try {
     sessionStorage.setItem(
       STORAGE_KEY,
@@ -59,6 +74,24 @@ function persistPositions() {
     /* 忽略存储异常 */
   }
 }
+
+/** 连续导航合并成一次写入；关闭/刷新时用 beforeunload 兜底，避免丢最后一次位置（BA） */
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
+function persistPositions() {
+  if (persistTimer !== null) clearTimeout(persistTimer);
+  persistTimer = setTimeout(() => {
+    persistTimer = null;
+    writePositions();
+  }, 300);
+}
+
+window.addEventListener("beforeunload", () => {
+  if (persistTimer !== null) {
+    clearTimeout(persistTimer);
+    persistTimer = null;
+  }
+  writePositions();
+});
 
 loadPositions();
 

@@ -1,4 +1,4 @@
-import { computed, reactive } from "vue";
+import { computed, markRaw, reactive, shallowRef } from "vue";
 import { fetchServerGroup, fetchService, fetchSetting, wsServerUrl } from "@/api/client";
 import type {
   CycleTransferData,
@@ -48,7 +48,8 @@ export const state = reactive({
 
   /* 实时状态 */
   now: 0,
-  servers: [] as NezhaServer[],
+  /** 整阵替换 + markRaw，避免 WS 推送把每个 server 深度代理（P1） */
+  servers: shallowRef<NezhaServer[]>([]),
   /** 注意：后端 WS 的 online 字段是在线「用户」数，不是在线节点数 */
   onlineUsers: 0,
   wsConnected: false,
@@ -132,25 +133,49 @@ function scheduleReconnect() {
 
 /** 面板的 public_note 是静态配置，但 WS 推送会裁剪字段；缓存最近一次非空值避免徽章闪没 */
 const noteCache = new Map<number, string>();
+const NOTE_CACHE_LIMIT = 500;
+
+/** 写入缓存并限制容量：Map 保持插入顺序，超出时淘汰最早项 */
+function rememberNote(id: number, note: string) {
+  noteCache.set(id, note);
+  if (noteCache.size > NOTE_CACHE_LIMIT) {
+    const oldest = noteCache.keys().next().value;
+    if (oldest !== undefined) noteCache.delete(oldest);
+  }
+}
 
 function applyPayload(payload: { now: number; online?: number; servers?: NezhaServer[] }) {
   if (typeof payload.now === "number") state.now = payload.now;
   if (Array.isArray(payload.servers)) {
-    state.servers = payload.servers.map((server) => {
+    const next = payload.servers.map((server) => {
+      const hasNoteField = Object.prototype.hasOwnProperty.call(server, "public_note");
       if (server.public_note) {
-        noteCache.set(server.id, server.public_note);
+        rememberNote(server.id, server.public_note);
+        return server;
+      }
+      // public_note 字段完全不存在＝WS 对无权限观众的裁剪，保留缓存避免徽章闪没；
+      // 字段明确存在且为空＝面板真的清空，才失效缓存。
+      if (hasNoteField) {
+        noteCache.delete(server.id);
         return server;
       }
       const cached = noteCache.get(server.id);
       return cached === undefined ? server : { ...server, public_note: cached };
     });
+    state.servers = markRaw(next);
   }
   if (typeof payload.online === "number") state.onlineUsers = payload.online;
   state.receivedOnce = true;
 }
 
 function connectWs() {
-  if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+  // CLOSING 也算“活跃”：此时旧 socket 尚未触发 onclose，若允许新建会短暂出现两条连接。
+  if (
+    socket &&
+    (socket.readyState === WebSocket.OPEN ||
+      socket.readyState === WebSocket.CONNECTING ||
+      socket.readyState === WebSocket.CLOSING)
+  ) {
     return;
   }
 
@@ -177,7 +202,9 @@ function connectWs() {
     }
   };
 
-  socket.onclose = () => {
+  socket.onclose = (event) => {
+    // 只处理当前 socket 的关闭事件：旧连接迟到的回调不能清掉新连接。
+    if (event.target !== socket) return;
     state.wsConnected = false;
     socket = null;
 
@@ -192,7 +219,8 @@ function connectWs() {
     scheduleReconnect();
   };
 
-  socket.onerror = () => {
+  socket.onerror = (event) => {
+    if (event.target !== socket) return;
     state.wsConnected = false;
   };
 }
@@ -219,10 +247,19 @@ export function initStore() {
 
 /* ---------------- 派生数据 ---------------- */
 
+/** 在线判定只算一次，供 onlineServers / preparedServers 共用（F） */
+const onlineFlags = computed(() => {
+  const flags = new Map<number, boolean>();
+  for (const server of state.servers) flags.set(server.id, isServerOnline(state.now, server));
+  return flags;
+});
+
 /** 在线节点数：必须按 last_active 自行判定（后端 online 字段是在线用户数） */
-export const onlineServers = computed(
-  () => state.servers.filter((server) => isServerOnline(state.now, server)).length,
-);
+export const onlineServers = computed(() => {
+  let count = 0;
+  for (const online of onlineFlags.value.values()) if (online) count += 1;
+  return count;
+});
 
 export const groupNames = computed(() =>
   state.groups.map((item) => item.group.name).filter(Boolean),
@@ -241,7 +278,7 @@ export const preparedServers = computed<PreparedServer[]>(() => {
   const groupIds = state.filter.group === "all" ? null : groupIdMap.value.get(state.filter.group);
   return state.servers
     .filter((server) => (groupIds ? groupIds.has(server.id) : true))
-    .map((server) => ({ server, online: isServerOnline(state.now, server) }));
+    .map((server) => ({ server, online: onlineFlags.value.get(server.id) ?? false }));
 });
 
 /** 概览统计（基于当前分组） */
@@ -316,21 +353,23 @@ export const visibleServers = computed<PreparedServer[]>(() => {
     }
   };
 
-  return [...list].sort((a, b) => {
-    // 离线服务器始终排在后面（名称排序时除外）
-    if (sortKey !== "name") {
-      if (a.online !== b.online) return a.online ? -1 : 1;
-    }
-    const va = metric(a);
-    const vb = metric(b);
-    let result: number;
-    if (typeof va === "string" || typeof vb === "string") {
-      result = String(va).localeCompare(String(vb), "zh-CN");
-    } else {
-      result = va - vb;
-    }
-    return sortAsc ? result : -result;
-  });
+  // Schwartzian：每个节点的 metric key 只算一次，避免 sort 回调里 O(n log n) 次 switch（P3）
+  return [...list]
+    .map((item) => ({ item, key: metric(item) }))
+    .sort((a, b) => {
+      // 离线服务器始终排在后面（名称排序时除外）
+      if (sortKey !== "name") {
+        if (a.item.online !== b.item.online) return a.item.online ? -1 : 1;
+      }
+      let result: number;
+      if (typeof a.key === "string" || typeof b.key === "string") {
+        result = String(a.key).localeCompare(String(b.key), "zh-CN");
+      } else {
+        result = Number(a.key) - Number(b.key);
+      }
+      return sortAsc ? result : -result;
+    })
+    .map((entry) => entry.item);
 });
 
 export const serverById = computed(() => {

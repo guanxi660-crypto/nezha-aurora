@@ -3,7 +3,27 @@ import { ref, watch } from "vue";
 export type ThemeMode = "light" | "dark";
 
 const STORAGE_KEY = "aurora-theme";
-const systemDark = window.matchMedia("(prefers-color-scheme: dark)");
+
+/** 老浏览器/非浏览器环境可能没有 matchMedia 或会抛错，回退到无副作用 stub（CI） */
+function safeMatchMedia(query: string): MediaQueryList {
+  try {
+    if (typeof window.matchMedia === "function") return window.matchMedia(query);
+  } catch {
+    /* 回退到 stub */
+  }
+  return {
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener() {},
+    removeListener() {},
+    addEventListener() {},
+    removeEventListener() {},
+    dispatchEvent: () => false,
+  };
+}
+
+const systemDark = safeMatchMedia("(prefers-color-scheme: dark)");
 const systemTheme = (): ThemeMode => (systemDark.matches ? "dark" : "light");
 
 function readStored(): ThemeMode | null {
@@ -52,12 +72,13 @@ watch(theme, (mode) => {
 }, { flush: "sync" });
 
 // 读 matchMedia 必须监听 change；跟随系统时同步刷新视图。
-systemDark.addEventListener("change", () => {
+const onSystemChange = () => {
   if (override === null) theme.value = systemTheme();
-});
+};
+systemDark.addEventListener("change", onSystemChange);
 
 // 另一个标签页切换/清除主题时保持同步。
-window.addEventListener("storage", (event) => {
+const onStorageChange = (event: StorageEvent) => {
   if (event.key !== STORAGE_KEY) return;
   const next: ThemeMode | null =
     event.newValue === "light" || event.newValue === "dark" ? event.newValue : null;
@@ -65,6 +86,13 @@ window.addEventListener("storage", (event) => {
   syncing = true;
   theme.value = next ?? systemTheme();
   syncing = false;
+};
+window.addEventListener("storage", onStorageChange);
+
+// HMR 重跑模块会叠加 listener，卸载时清掉，避免 dev 下累积（CJ）
+import.meta.hot?.dispose(() => {
+  systemDark.removeEventListener("change", onSystemChange);
+  window.removeEventListener("storage", onStorageChange);
 });
 
 export function toggleTheme() {

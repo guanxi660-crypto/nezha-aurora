@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import type { PreparedServer } from "@/store/nezha";
 import { countryFlag, formatSpeed, percent } from "@/utils/format";
@@ -184,6 +184,10 @@ function applyHover() {
     current.cluster = best;
   } else {
     tooltip.value = { cluster: best };
+    // tooltipEl 要等 Vue 把新 tooltip 渲染到 DOM 才变成非 null；
+    // 放在同步 placeTooltip 里会因 el 为 null 直接 return，导致首次弹出时位置为 0,0 然后下一帧又跳正。
+    nextTick(placeTooltip);
+    return;
   }
 
   placeTooltip();
@@ -192,6 +196,18 @@ function applyHover() {
 function openServer(id: number) {
   router.push(`/server/${id}`);
 }
+
+onBeforeUnmount(() => {
+  // 卸载时清掉挂在 window 上的 timer / rAF，避免组件消失后回调再回来动已卸载的状态。
+  if (hideTimer) {
+    clearTimeout(hideTimer);
+    hideTimer = 0;
+  }
+  if (moveFrame) {
+    cancelAnimationFrame(moveFrame);
+    moveFrame = 0;
+  }
+});
 
 onMounted(async () => {
   try {

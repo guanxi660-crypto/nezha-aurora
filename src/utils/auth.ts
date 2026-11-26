@@ -23,9 +23,8 @@ function readInitialToken(): string {
     const params = new URLSearchParams(window.location.search);
     const fromQuery = params.get("token");
 
-    if (fromQuery) {
-      window.localStorage.setItem(STORAGE_KEY, fromQuery);
-      // 令牌留在地址栏会进入浏览历史与 Referer，保存后马上移除
+    // 只要 URL 里出现过 token 参数就立刻抹除，空值也不留在地址栏（BJ）
+    if (params.has("token")) {
       params.delete("token");
       const rest = params.toString();
       window.history.replaceState(
@@ -33,6 +32,11 @@ function readInitialToken(): string {
         "",
         `${window.location.pathname}${rest ? `?${rest}` : ""}${window.location.hash}`,
       );
+    }
+
+    // 空 token 不写入存储，避免后续请求附带无效令牌
+    if (fromQuery) {
+      window.localStorage.setItem(STORAGE_KEY, fromQuery);
       return fromQuery;
     }
 
@@ -51,4 +55,6 @@ export function clearAccessToken() {
   } catch {
     /* ignore */
   }
+  // 令牌被撤销/过期时留一条可观测提示；面向用户的 UI 提示由组件层负责（BH）
+  console.info("[Aurora] 访问令牌已清除，将以访客身份继续（部分系统字段可能不可用）");
 }

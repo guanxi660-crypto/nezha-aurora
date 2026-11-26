@@ -21,10 +21,12 @@ function loadExternalScript(src: string) {
 }
 
 function runInlineScript(content: string) {
-  return new Promise<void>((resolve) => {
+  return new Promise<void>((resolve, reject) => {
     const script = document.createElement("script");
     script.textContent = content;
     script.setAttribute(MARK, "true");
+    // 内联脚本语法错误会在 script 元素上派发 error；reject 让外层 catch 生效（BN）
+    script.onerror = () => reject(new Error("内联脚本执行失败"));
     document.body.appendChild(script);
     resolve();
   });
@@ -54,45 +56,61 @@ function loadStyleElement(element: HTMLElement) {
 export async function injectCustomCode(content: string): Promise<void> {
   if (!content) return;
 
-  const holder = document.createElement("div");
-  holder.innerHTML = content;
+  // DOMParser 产出的文档是 inert 的：解析阶段不会为 detached img/video 发请求（BL）
+  const parsed = new DOMParser().parseFromString(content, "text/html");
+  const nodes = Array.from(parsed.body.childNodes).map((node) =>
+    document.importNode(node, true),
+  );
+  const mount = document.getElementById("app") || document.body;
+
   cleanInjected();
 
-  for (const node of Array.from(holder.childNodes)) {
+  // 外部脚本/样式并行加载；script.async=false 保证脚本仍按插入顺序执行（P29）
+  // 内联脚本按出现顺序串行执行，避免依赖外部库时抢跑。
+  const pending: Promise<void>[] = [];
+  const inlineScripts: string[] = [];
+  const guard = (p: Promise<void>) =>
+    p.catch((error) => console.error("[Aurora] 自定义代码注入失败", error));
+
+  for (const node of nodes) {
     if (node.nodeType === Node.TEXT_NODE) {
-      document.body.appendChild(
-        document.createTextNode(node.textContent || ""),
-      );
+      mount.appendChild(document.createTextNode(node.textContent || ""));
       continue;
     }
     if (node.nodeType !== Node.ELEMENT_NODE) continue;
 
     const element = node as HTMLElement;
-    try {
-      switch (element.tagName) {
-        case "SCRIPT": {
-          const src = (element as HTMLScriptElement).src;
-          if (src) await loadExternalScript(src);
-          else await runInlineScript(element.textContent || "");
-          break;
-        }
-        case "STYLE":
-        case "LINK":
-          await loadStyleElement(element);
-          break;
-        case "META": {
-          const meta = element.cloneNode(true) as HTMLElement;
-          meta.setAttribute(MARK, "true");
-          document.head.appendChild(meta);
-          break;
-        }
-        default:
-          element.setAttribute(MARK, "true");
-          document.body.appendChild(element);
+    switch (element.tagName) {
+      case "SCRIPT": {
+        const src = (element as HTMLScriptElement).src;
+        if (src) pending.push(guard(loadExternalScript(src)));
+        else inlineScripts.push(element.textContent || "");
+        break;
       }
-    } catch (error) {
-      console.error("[Aurora] 自定义代码注入失败", error);
+      case "STYLE":
+      case "LINK":
+        pending.push(guard(loadStyleElement(element)));
+        break;
+      case "META": {
+        // 同名 theme-color 会让 theme.ts 改到原 meta 失效，跳过注入（BP）
+        if ((element.getAttribute("name") || "").toLowerCase() === "theme-color") break;
+        const meta = element.cloneNode(true) as HTMLElement;
+        meta.setAttribute(MARK, "true");
+        document.head.appendChild(meta);
+        break;
+      }
+      default:
+        element.setAttribute(MARK, "true");
+        // 默认元素挂到 #app 内，而不是 body 末尾（BO）
+        mount.appendChild(element);
     }
+  }
+
+  await Promise.all(pending);
+  for (const code of inlineScripts) {
+    await runInlineScript(code).catch((error) =>
+      console.error("[Aurora] 自定义代码注入失败", error),
+    );
   }
 }
 
