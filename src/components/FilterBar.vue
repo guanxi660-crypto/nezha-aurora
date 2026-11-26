@@ -16,6 +16,10 @@ const sortOptions: { key: SortKey; label: string }[] = [
   { key: "disk", label: "磁盘占用" },
   { key: "up", label: "上行速率" },
   { key: "down", label: "下行速率" },
+  { key: "net_in_transfer", label: "入网流量" },
+  { key: "net_out_transfer", label: "出网流量" },
+  { key: "transfer", label: "合计流量" },
+  { key: "tcp_conn", label: "TCP 连接" },
   { key: "uptime", label: "运行时长" },
 ];
 

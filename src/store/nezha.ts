@@ -17,6 +17,10 @@ export type SortKey =
   | "disk"
   | "up"
   | "down"
+  | "net_in_transfer"
+  | "net_out_transfer"
+  | "transfer"
+  | "tcp_conn"
   | "uptime";
 
 export interface PreparedServer {
@@ -330,6 +334,14 @@ export const visibleServers = computed<PreparedServer[]>(() => {
         return server.state?.net_out_speed || 0;
       case "down":
         return server.state?.net_in_speed || 0;
+      case "net_in_transfer":
+        return server.state?.net_in_transfer || 0;
+      case "net_out_transfer":
+        return server.state?.net_out_transfer || 0;
+      case "transfer":
+        return (server.state?.net_in_transfer || 0) + (server.state?.net_out_transfer || 0);
+      case "tcp_conn":
+        return server.state?.tcp_conn_count || 0;
       case "uptime":
         return online ? server.state?.uptime || 0 : -1;
       default:
