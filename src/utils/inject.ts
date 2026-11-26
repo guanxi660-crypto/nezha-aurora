@@ -124,10 +124,8 @@ export interface AuroraRuntimeConfig {
   backgroundImage?: string;
   mobileBackgroundImage?: string;
   links: { name: string; link: string }[];
-  forceTheme?: "light" | "dark";
-  forceCardInline: boolean;
+  /** 面板自定义代码注入：ForceShowMap=true 时 Aurora 启动即强制进入地图视图 */
   forceShowMap: boolean;
-  forceShowServices: boolean;
   /** 主题专属配置：window.AuroraConfig = { accentColor: "#38bdf8", ... } */
   accentColor?: string;
   showAdmin?: boolean;
@@ -140,10 +138,7 @@ type GlobalWithThemeVars = typeof window & {
   CustomBackgroundImage?: string;
   CustomMobileBackgroundImage?: string;
   CustomLinks?: string;
-  ForceTheme?: string;
-  ForceCardInline?: boolean;
   ForceShowMap?: boolean;
-  ForceShowServices?: boolean;
   CustomIllustration?: string;
   AuroraConfig?: Record<string, unknown>;
   NezhaAuroraConfig?: Record<string, unknown>;
@@ -175,10 +170,7 @@ export function readRuntimeConfig(): AuroraRuntimeConfig {
     backgroundImage: w.CustomBackgroundImage || undefined,
     mobileBackgroundImage: w.CustomMobileBackgroundImage || undefined,
     links,
-    forceTheme: w.ForceTheme === "dark" || w.ForceTheme === "light" ? w.ForceTheme : undefined,
-    forceCardInline: w.ForceCardInline === true,
     forceShowMap: w.ForceShowMap === true,
-    forceShowServices: w.ForceShowServices === true,
     accentColor: typeof plugin.accentColor === "string" ? plugin.accentColor : undefined,
     // 默认展示「进入管理面板」入口，需要隐藏时在自定义代码里设置 showAdmin: false
     showAdmin: plugin.showAdmin !== false,

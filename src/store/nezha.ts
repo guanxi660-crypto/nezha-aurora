@@ -1,10 +1,8 @@
 import { computed, markRaw, reactive, shallowRef } from "vue";
-import { fetchServerGroup, fetchService, fetchSetting, wsServerUrl } from "@/api/client";
+import { fetchServerGroup, fetchSetting, wsServerUrl } from "@/api/client";
 import type {
-  CycleTransferData,
   NezhaServer,
   ServerGroup,
-  ServiceData,
 } from "@/api/types";
 import { injectCustomCode, readRuntimeConfig, type AuroraRuntimeConfig } from "@/utils/inject";
 import { isServerOnline } from "@/utils/format";
@@ -41,9 +39,7 @@ export const state = reactive({
   tsdbEnabled: false,
   runtime: {
     links: [],
-    forceCardInline: false,
     forceShowMap: false,
-    forceShowServices: false,
   } as AuroraRuntimeConfig,
 
   /* 实时状态 */
@@ -57,8 +53,6 @@ export const state = reactive({
 
   /* 静态数据 */
   groups: [] as ServerGroup[],
-  services: {} as Record<string, ServiceData>,
-  cycleTransfer: {} as Record<string, CycleTransferData>,
 
   /* 视图状态 */
   filter: {
@@ -108,16 +102,6 @@ async function loadGroups() {
     state.groups = Array.isArray(groups) ? groups : [];
   } catch (error) {
     console.error("[Aurora] 读取分组失败", error);
-  }
-}
-
-export async function loadServices() {
-  try {
-    const data = await fetchService();
-    state.services = data?.services || {};
-    state.cycleTransfer = data?.cycle_transfer_stats || {};
-  } catch (error) {
-    console.error("[Aurora] 读取服务监控失败", error);
   }
 }
 
@@ -372,10 +356,9 @@ export const visibleServers = computed<PreparedServer[]>(() => {
     .map((entry) => entry.item);
 });
 
+
 export const serverById = computed(() => {
   const map = new Map<number, NezhaServer>();
   for (const server of state.servers) map.set(server.id, server);
   return map;
 });
-
-export const serviceList = computed(() => Object.values(state.services));

@@ -2,7 +2,8 @@ import { ref, watch } from "vue";
 
 export type ThemeMode = "light" | "dark";
 
-const STORAGE_KEY = "aurora-theme";
+/** null = 跟随系统；有值 = 用户当前覆盖（不落盘，刷新即归位）。UI 仍是明暗二选一。 */
+let override: ThemeMode | null = null;
 
 /** 老浏览器/非浏览器环境可能没有 matchMedia 或会抛错，回退到无副作用 stub（CI） */
 function safeMatchMedia(query: string): MediaQueryList {
@@ -26,23 +27,7 @@ function safeMatchMedia(query: string): MediaQueryList {
 const systemDark = safeMatchMedia("(prefers-color-scheme: dark)");
 const systemTheme = (): ThemeMode => (systemDark.matches ? "dark" : "light");
 
-function readStored(): ThemeMode | null {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    return stored === "light" || stored === "dark" ? stored : null;
-  } catch {
-    return null;
-  }
-}
-
-/** null = 跟随系统；有值 = 用户覆盖。UI 仍是明暗二选一。 */
-let override: ThemeMode | null = readStored();
-
-function detectInitial(): ThemeMode {
-  return override ?? systemTheme();
-}
-
-export const theme = ref<ThemeMode>(detectInitial());
+export const theme = ref<ThemeMode>(systemTheme());
 
 function apply(mode: ThemeMode) {
   document.documentElement.dataset.theme = mode;
@@ -53,22 +38,11 @@ function apply(mode: ThemeMode) {
 
 apply(theme.value);
 
-/** 跨标签页同步时只更新视图，不再回写 localStorage */
-let syncing = false;
-
+/** 手动覆盖跟随系统偏好时立即撤销覆盖（系统偏好变了也自动跟随）。 */
 watch(theme, (mode) => {
   apply(mode);
-  if (syncing) return;
-  // 目标值与系统偏好一致时删除存储值，回到「跟随系统」，不把偏好钉死。
-  // 只在此刻检查，系统偏好日后变化到与已有覆盖一致时不撤销覆盖。
-  const next: ThemeMode | null = mode === systemTheme() ? null : mode;
-  override = next;
-  try {
-    if (next === null) localStorage.removeItem(STORAGE_KEY);
-    else localStorage.setItem(STORAGE_KEY, next);
-  } catch {
-    /* ignore */
-  }
+  if (mode === systemTheme()) override = null;
+  else override = mode;
 }, { flush: "sync" });
 
 // 读 matchMedia 必须监听 change；跟随系统时同步刷新视图。
@@ -77,22 +51,9 @@ const onSystemChange = () => {
 };
 systemDark.addEventListener("change", onSystemChange);
 
-// 另一个标签页切换/清除主题时保持同步。
-const onStorageChange = (event: StorageEvent) => {
-  if (event.key !== STORAGE_KEY) return;
-  const next: ThemeMode | null =
-    event.newValue === "light" || event.newValue === "dark" ? event.newValue : null;
-  override = next;
-  syncing = true;
-  theme.value = next ?? systemTheme();
-  syncing = false;
-};
-window.addEventListener("storage", onStorageChange);
-
 // HMR 重跑模块会叠加 listener，卸载时清掉，避免 dev 下累积（CJ）
 import.meta.hot?.dispose(() => {
   systemDark.removeEventListener("change", onSystemChange);
-  window.removeEventListener("storage", onStorageChange);
 });
 
 export function toggleTheme() {
