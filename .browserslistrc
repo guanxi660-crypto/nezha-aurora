@@ -1,0 +1,15 @@
+# Aurora 浏览器基线
+#
+# - color-mix() 必须 Safari 16.2+ / iOS 16.2+ / Chrome 111+ / Firefox 113+ 原生支持
+# - 所有 Safari < 16.2（含 iOS 16.0/16.1 与部分 macOS 老版本）color-mix 不生效
+# - 上调到此基线意味着放弃约 <1% 的 Safari 用户；Vite target 已同步 safari16.2
+#
+# 基线依据：
+#   https://caniuse.com/css-color-function-mix
+#   Safari 16.2 / iOS 16.2（2024-02）正式支持 CSS Color Level 5 §12
+> 0.5%
+safari >= 16.2
+iOS >= 16.2
+Chrome >= 111
+Firefox >= 113
+not dead

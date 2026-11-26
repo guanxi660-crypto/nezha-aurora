@@ -38,8 +38,10 @@ export default defineConfig({
   },
   build: {
     // 与官方用户前端保持一致的兼容目标，避免旧版 iOS WebKit 白屏
-    target: ["es2020", "safari15"],
-    cssTarget: ["safari15"],
+    // Safari 16.2+ / iOS 16.2+（2024 初）原生支持 CSS Color Level 5 color-mix()
+    // 低于此基线的浏览器靠 postcss-preset-env 在构建期降级到 solid color fallback
+    target: ["es2020", "safari16.2"],
+    cssTarget: ["safari16.2"],
     assetsDir: "assets",
     chunkSizeWarningLimit: 1500,
     rollupOptions: {
