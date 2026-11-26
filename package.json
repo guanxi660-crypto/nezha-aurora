@@ -8,6 +8,7 @@
     "dev": "vite",
     "build": "vite build",
     "typecheck": "vue-tsc --noEmit",
+    "test": "node --test tests/nezha.test.mjs",
     "preview": "vite preview --host",
     "preview:demo": "node preview/demo-server.mjs",
     "package:theme": "node scripts/package-theme.mjs",

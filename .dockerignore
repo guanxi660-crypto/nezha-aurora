@@ -1,5 +1,6 @@
 node_modules
 dist
+dist.zip
 .git
 .gitignore
 .github
@@ -9,3 +10,9 @@ screenshots
 *.log
 .env
 .env.local
+*.md
+install.sh
+preview
+tests
+deploy
+.playwright-cli

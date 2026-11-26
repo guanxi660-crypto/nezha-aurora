@@ -18,15 +18,16 @@
 # 选项:
 #   --backend URL        哪吒面板地址（含协议），默认 http://host.docker.internal:8008
 #   --port N             宿主机监听端口，默认 8080
+#   --bind ADDR          宿主机绑定地址，默认 0.0.0.0；只给本机访问用 127.0.0.1
 #   --name NAME          容器名，默认 nezha-aurora
 #   --image REF          自定义镜像（镜像站/自建），默认官方 GHCR 镜像
 #   --grpc-backend H:P   Agent 上报通道（不含协议），默认由容器内自动推导
-#   --build              不拉官方镜像，改用源码本地构建（非 amd64 架构需要）
+#   --build              不拉官方镜像，改用源码本地构建（自定义架构/离线环境）
 #   --mirror NAME        安装 Docker 时使用镜像源（如 Aliyun，中国大陆网络适用）
 #   -y, --yes            跳过所有交互确认，直接使用默认值/给定参数
 #   -h, --help           显示帮助
 #
-# 环境变量等价物: NEZHA_BACKEND / NEZHA_GRPC_BACKEND / AURORA_PORT / AURORA_NAME / AURORA_IMAGE
+# 环境变量等价物: NEZHA_BACKEND / NEZHA_GRPC_BACKEND / AURORA_PORT / AURORA_NAME / AURORA_IMAGE / AURORA_BIND
 # =============================================================================
 set -euo pipefail
 
@@ -45,15 +46,30 @@ warn() { printf '%s[WARN]%s %s\n' "$C_YELLOW" "$C_RESET" "$*" >&2; }
 die()  { printf '%s[FAIL]%s %s\n' "$C_RED" "$C_RESET" "$*" >&2; exit 1; }
 
 usage() {
-  sed -n '2,30p' "${BASH_SOURCE[0]:-/dev/null}" 2>/dev/null | sed 's/^# \{0,1\}//' || true
+  # 用固定文本，避免 sed 读取 $0/BASH_SOURCE：curl 管道下它们是 /dev/fd/*，读不到有效行
   cat <<'EOF'
+Nezha Aurora —— Linux 一键安装脚本
 
 用法: bash install.sh [install|update|status|uninstall] [选项]
   install    （默认）安装并启动 Aurora
   update     拉取最新镜像并重建容器，保留现有面板地址与端口
   status     查看容器与后端连通状态
   uninstall  移除容器；加 --purge 同时删除镜像
-选项见脚本头部注释（--backend / --port / --name / --image / --build / --mirror / -y）。
+
+选项:
+  --backend URL        哪吒面板地址（含协议），默认 http://host.docker.internal:8008
+  --port N             宿主机监听端口，默认 8080
+  --bind ADDR          宿主机绑定地址，默认 0.0.0.0；只给本机访问用 127.0.0.1
+  --name NAME          容器名，默认 nezha-aurora
+  --image REF          自定义镜像，默认 ghcr.io/guanxi660-crypto/nezha-aurora:latest
+  --grpc-backend H:P   Agent 上报通道（不含协议），默认由容器内自动推导
+  --build              不拉官方镜像，改用源码本地构建
+  --mirror NAME        安装 Docker 时使用镜像源（如 Aliyun）
+  -y, --yes            跳过所有交互确认，直接使用默认值/给定参数
+  -h, --help           显示帮助
+
+远程一键: bash <(curl -fsSL https://raw.githubusercontent.com/guanxi660-crypto/nezha-aurora/main/install.sh)
+环境变量: NEZHA_BACKEND / NEZHA_GRPC_BACKEND / AURORA_PORT / AURORA_NAME / AURORA_IMAGE / AURORA_BIND
 EOF
 }
 
@@ -62,6 +78,7 @@ CMD="install"
 BACKEND="${NEZHA_BACKEND:-}"
 GRPC_BACKEND="${NEZHA_GRPC_BACKEND:-}"
 PORT="${AURORA_PORT:-8080}"
+BIND_ADDR="${AURORA_BIND:-0.0.0.0}"
 NAME="${AURORA_NAME:-nezha-aurora}"
 IMAGE="${AURORA_IMAGE:-$IMAGE_DEFAULT}"
 BUILD=0
@@ -71,10 +88,14 @@ DOCKER_MIRROR=""
 BACKEND_SET=0
 PORT_SET=0
 BUILD_TMP=""
+INSTALLER_TMP=""
 
 cleanup() {
   if [ -n "$BUILD_TMP" ] && [ -d "$BUILD_TMP" ]; then
     rm -rf "$BUILD_TMP"
+  fi
+  if [ -n "$INSTALLER_TMP" ]; then
+    rm -f "$INSTALLER_TMP"
   fi
 }
 trap cleanup EXIT
@@ -86,6 +107,7 @@ while [ $# -gt 0 ]; do
     --backend)      [ $# -ge 2 ] || die "--backend 需要一个值"; BACKEND="$2"; BACKEND_SET=1; shift ;;
     --grpc-backend) [ $# -ge 2 ] || die "--grpc-backend 需要一个值"; GRPC_BACKEND="$2"; shift ;;
     --port)         [ $# -ge 2 ] || die "--port 需要一个值"; PORT="$2"; PORT_SET=1; shift ;;
+    --bind)         [ $# -ge 2 ] || die "--bind 需要一个值"; BIND_ADDR="$2"; shift ;;
     --name)         [ $# -ge 2 ] || die "--name 需要一个值"; NAME="$2"; shift ;;
     --image)        [ $# -ge 2 ] || die "--image 需要一个值"; IMAGE="$2"; shift ;;
     --mirror)       [ $# -ge 2 ] || die "--mirror 需要一个值"; DOCKER_MIRROR="$2"; shift ;;
@@ -101,16 +123,24 @@ done
 # ---------------------------- 基础检查 ----------------------------
 [ "$(uname -s)" = "Linux" ] || die "本脚本仅支持 Linux（当前: $(uname -s)）"
 
+# 非 root 时尝试 sudo 重执行。兼容远程一键：bash <(curl ...) 下 $0/BASH_SOURCE
+# 为 /dev/fd/63（管道而非普通文件），不能再用 [ -f "$0" ] 把 sudo 分支短路掉。
+self="${BASH_SOURCE[0]:-$0}"
+self_ok=0
+case "$self" in
+  /dev/fd/*) self_ok=1 ;;
+  *) [ -f "$self" ] && [ -r "$self" ] && self_ok=1 ;;
+esac
 if [ "$(id -u)" -ne 0 ]; then
-  if command -v sudo >/dev/null 2>&1 && [ -f "$0" ] && [ -r "$0" ]; then
+  if command -v sudo >/dev/null 2>&1 && [ "$self_ok" -eq 1 ]; then
     info "需要 root 权限，尝试通过 sudo 重新执行…"
     if [ ${#ORIG_ARGS[@]} -gt 0 ]; then
-      exec sudo bash "$0" "${ORIG_ARGS[@]}"
+      exec sudo bash "$self" "${ORIG_ARGS[@]}"
     else
-      exec sudo bash "$0"
+      exec sudo bash "$self"
     fi
   fi
-  die "请以 root 运行（或在命令前加 sudo；远程一键请用 sudo bash <(curl ...)）"
+  die "请以 root 运行（或在命令前加 sudo；远程一键建议用 sudo bash <(curl ...)）"
 fi
 
 
@@ -121,10 +151,12 @@ ask() { # ask <提示> <默认值> -> stdout
     printf '%s' "$default"
     return 0
   fi
-  if [ -t 0 ]; then
-    read -r -p "$prompt [${default}]: " answer || true
-  elif [ -e /dev/tty ] && (: < /dev/tty) 2>/dev/null; then
-    read -r -p "$prompt [${default}]: " answer < /dev/tty || true
+  if [ -t 0 ] || [ -e /dev/tty ]; then
+    if [ -t 0 ]; then
+      read -r -p "$prompt [${default}]: " answer || true
+    else
+      read -r -p "$prompt [${default}]: " answer < /dev/tty 2>/dev/null || true
+    fi
   fi
   printf '%s' "${answer:-$default}"
 }
@@ -168,7 +200,8 @@ ensure_docker() {
     ensure_curl
     info "未检测到 Docker，使用官方脚本安装（get.docker.com）…"
     local installer
-    installer=$(mktemp)
+    INSTALLER_TMP=$(mktemp)
+    installer="$INSTALLER_TMP"
     curl -fsSL https://get.docker.com -o "$installer" || die "下载 Docker 安装脚本失败（网络问题可先手动安装 Docker）"
     if [ -n "$DOCKER_MIRROR" ]; then
       sh "$installer" --mirror "$DOCKER_MIRROR" || die "Docker 安装失败"
@@ -176,6 +209,7 @@ ensure_docker() {
       sh "$installer" || die "Docker 安装失败（中国大陆网络可加 --mirror Aliyun 重试）"
     fi
     rm -f "$installer"
+    INSTALLER_TMP=""
   fi
   if ! docker info >/dev/null 2>&1; then
     if command -v systemctl >/dev/null 2>&1; then
@@ -195,12 +229,12 @@ check_arch() {
   local arch
   arch=$(uname -m)
   case "$arch" in
-    x86_64|amd64) return 0 ;;
+    x86_64|amd64|aarch64|arm64) return 0 ;;
   esac
   if [ "$BUILD" -eq 0 ] && [ "$IMAGE" = "$IMAGE_DEFAULT" ]; then
-    die "官方预构建镜像仅支持 linux/amd64（当前架构: $arch）。请加 --build 从源码本地构建，或用 --image 指定适配架构的镜像。"
+    die "官方预构建镜像仅支持 linux/amd64 与 linux/arm64（当前架构: $arch）。请加 --build 从源码本地构建，或用 --image 指定适配架构的镜像。"
   fi
-  warn "当前架构 $arch 非 amd64，将使用本地构建/自定义镜像: $IMAGE"
+  warn "当前架构 $arch 非 amd64/arm64，将使用本地构建/自定义镜像: $IMAGE"
 }
 
 # ---------------------------- 镜像获取 ----------------------------
@@ -254,7 +288,8 @@ fetch_image() {
 
 # ---------------------------- 容器操作 ----------------------------
 container_exists() {
-  docker ps -a --format '{{.Names}}' | grep -qx "$NAME"
+  # 不用 docker ps | grep：pipefail 下大输出会触发 SIGPIPE(141)，且 NAME 中的 . 会被当正则
+  docker inspect --type container "$NAME" >/dev/null 2>&1
 }
 
 read_existing_config() {
@@ -279,10 +314,16 @@ normalize_backend() {
     http://*|https://*) : ;;
     *) die "面板地址必须含协议，例如 http://127.0.0.1:8008 或 https://status.example.com（当前: $BACKEND）" ;;
   esac
-  local hostpart
-  hostpart=$(printf '%s' "$BACKEND" | sed -E 's#^https?://##; s#[:/].*$##')
-  if [ "$hostpart" = "127.0.0.1" ] || [ "$hostpart" = "localhost" ]; then
-    BACKEND=$(printf '%s' "$BACKEND" | sed -E 's#^(https?://)(127\.0\.0\.1|localhost)#\1host.docker.internal#')
+  # 提取 host[:port]：去 userinfo、path/query、兼容 IPv6 字面量与 user:pass@host
+  local hostport hostpart
+  hostport=$(printf '%s' "$BACKEND" | sed -E 's#^[a-zA-Z][a-zA-Z0-9+.-]*://##; s#[/?#].*$##; s#^[^@]*@##')
+  case "$hostport" in
+    '['*) hostpart="${hostport%%]*}"; hostpart="${hostpart#\[}" ;;
+    *:*)  hostpart="${hostport%%:*}" ;;
+    *)    hostpart="$hostport" ;;
+  esac
+  if [ "$hostpart" = "127.0.0.1" ] || [ "$hostpart" = "localhost" ] || [ "$hostpart" = "::1" ]; then
+    BACKEND=$(printf '%s' "$BACKEND" | sed -E "s#^(https?://)([^/@]*@)?(127\.0\.0\.1|localhost|\[::1\])#\1\2host.docker.internal#")
     warn "面板在本机：容器内 127.0.0.1 指向容器自身，已自动改写为 $BACKEND"
   fi
 }
@@ -306,15 +347,29 @@ port_busy() {
   fi
 }
 
-run_container() {
+# 端口被占用时区分「本容器自己占用」与「其他程序占用」，避免正常重装被误判
+port_busy_by_other() {
+  port_busy || return 1
+  if container_exists; then
+    local own_port
+    own_port=$(docker port "$NAME" 80/tcp 2>/dev/null | head -n 1 | awk -F: '{print $NF}')
+    [ "$own_port" = "$PORT" ] && return 1
+  fi
+  return 0
+}
+
+run_container_cmd() {
   local args=(run -d --name "$NAME" --restart unless-stopped
-    -p "${PORT}:80"
+    -p "${BIND_ADDR}:${PORT}:80"
     --add-host=host.docker.internal:host-gateway
     -e "NEZHA_BACKEND=${BACKEND}")
   if [ -n "$GRPC_BACKEND" ]; then
     args+=(-e "NEZHA_GRPC_BACKEND=${GRPC_BACKEND}")
   fi
-  docker "${args[@]}" "$IMAGE" >/dev/null || die "容器启动失败（docker run 报错见上方；--add-host host-gateway 需要 Docker 20.10+）"
+  docker "${args[@]}" "$IMAGE" >/dev/null
+}
+run_container() {
+  run_container_cmd || die "容器启动失败（docker run 报错见上方；--add-host host-gateway 需要 Docker 20.10+）"
 }
 
 health_check() {
@@ -343,11 +398,13 @@ health_check() {
 }
 
 firewall_hint() {
-  if command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state >/dev/null 2>&1; then
-    warn "检测到 firewalld 运行中，若外网无法访问请放行端口："
-    warn "  firewall-cmd --permanent --add-port=${PORT}/tcp && firewall-cmd --reload"
-  elif command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q 'Status: active'; then
-    warn "检测到 ufw 运行中，若外网无法访问请放行端口：ufw allow ${PORT}/tcp"
+  # Docker -p 直接写 iptables，绕过 ufw/firewalld；ufw status 里看不到本服务端口，
+  # 不能再误导用户去 ufw allow。
+  info "注意：Docker -p 直接写入 iptables，不经 ufw/firewalld，ufw status 中看不到本服务端口。"
+  if [ "$BIND_ADDR" = "0.0.0.0" ] || [ "$BIND_ADDR" = "::" ]; then
+    warn "当前监听 ${BIND_ADDR}:${PORT}（所有网卡）；若只给本机访问，请用 --bind 127.0.0.1 重建。"
+  else
+    info "当前仅绑定 ${BIND_ADDR}:${PORT}，外部主机不可达。"
   fi
 }
 
@@ -389,12 +446,13 @@ cmd_install() {
   fi
   validate_port
   fetch_image
+  # 先检端口再删容器：端口被别的程序占用时保留旧容器（本容器自身占用不算冲突）
+  if port_busy_by_other; then
+    die "端口 ${PORT} 已被其他程序占用，请用 --port 换一个端口"
+  fi
   if container_exists; then
     confirm "容器 ${NAME} 已存在，删除并重建？" || die "已取消"
     docker rm -f "$NAME" >/dev/null
-  fi
-  if port_busy; then
-    die "端口 ${PORT} 已被其他程序占用，请用 --port 换一个端口"
   fi
   run_container
   health_check
@@ -411,8 +469,25 @@ cmd_update() {
   normalize_backend
   validate_port
   fetch_image
-  docker rm -f "$NAME" >/dev/null
-  run_container
+  # 旧容器先改名并停止（释放端口）作为回滚备份；docker run 失败时恢复并重新启动
+  local backup="${NAME}-backup-$(date +%s)"
+  if docker rename "$NAME" "$backup" >/dev/null 2>&1; then
+    docker stop "$backup" >/dev/null 2>&1 || true
+    if run_container_cmd; then
+      docker rm -f "$backup" >/dev/null 2>&1 || true
+    else
+      docker rm -f "$NAME" >/dev/null 2>&1 || true
+      if docker rename "$backup" "$NAME" >/dev/null 2>&1; then
+        docker start "$NAME" >/dev/null 2>&1 || true
+        die "更新失败，已回滚并重新启动旧容器 ${NAME}"
+      fi
+      die "更新失败且回滚失败：旧容器仍名为 ${backup}，请手动 docker rename ${backup} ${NAME} && docker start ${NAME}"
+    fi
+  else
+    warn "旧容器无法重命名，本次更新无回滚能力"
+    docker rm -f "$NAME" >/dev/null
+    run_container
+  fi
   health_check
   summary "更新"
 }
